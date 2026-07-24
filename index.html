@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Accessible California State Parks prescribed fire planning, weather, smoke-screening, and burn-history application."
+    />
+    <meta name="color-scheme" content="dark" />
+    <title>Prescribed Fire Operations Hub</title>
+
+    <script src="./config.js"></script>
+    <script>
+      const authConfig = window.APP_CONFIG.authentication || {};
+      const oauthConfigured =
+        ["auto", "oauth"].includes(String(authConfig.mode || "").toLowerCase()) &&
+        typeof authConfig.oauthAppId === "string" &&
+        authConfig.oauthAppId.trim().length > 10;
+
+      // ArcGIS user authentication and a global API key should not be active at
+      // the same time. When OAuth is configured, the signed-in user credential
+      // is used for secured web maps and feature layers.
+      window.esriConfig = {
+        portalUrl: oauthConfigured
+          ? (authConfig.oauthPortalUrl || window.APP_CONFIG.arcgis.portalUrl)
+          : window.APP_CONFIG.arcgis.portalUrl,
+        apiKey: oauthConfigured ? undefined : (window.APP_CONFIG.arcgis.apiKey || undefined)
+      };
+    </script>
+    <script type="module" src="https://js.arcgis.com/5.1/"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+
+  <body class="calcite-mode-dark">
+    <a class="skip-link" href="#main-content">Skip to main content</a> 
+    <a class="skip-link skip-link--second" href="#operations-panel">Skip to operations panel</a>
+
+    <div id="app" class="app-shell" data-layout="split">
+      <header class="app-header">
+        <div class="brand-block">
+          <img id="brandLogo" class="brand-logo" alt="" />
+          <div class="brand-copy">
+            <p id="appSubtitle" class="eyebrow"></p>
+            <h1 id="appTitle">Prescribed Fire Operations Hub</h1>
+          </div>
+        </div>
+
+        <div class="header-actions" aria-label="Application status and actions">
+          <div class="updated-block">
+            <span class="updated-label">Data refreshed</span>
+            <time id="lastUpdated" datetime="">Not yet</time>
+          </div>
+          <button id="refreshButton" class="glass-button" type="button">
+            <span aria-hidden="true">↻</span>
+            Refresh
+          </button>
+          <button id="accountButton" class="glass-button" type="button">Account</button>
+        </div>
+      </header>
+
+      <nav class="view-nav" aria-label="Primary application navigation">
+        <div class="tablist" role="tablist" aria-label="Application pages">
+          <button id="tab-overview" class="nav-button is-active" type="button" role="tab" aria-selected="true" aria-controls="panel-overview" data-panel="overview">Dashboard</button>
+          <button id="tab-map" class="nav-button" type="button" role="tab" aria-selected="false" aria-controls="panel-map" data-panel="map" tabindex="-1">Burn Map</button>
+          <button id="tab-list" class="nav-button" type="button" role="tab" aria-selected="false" aria-controls="panel-list" data-panel="list" tabindex="-1">Burn List</button>
+          <button id="tab-planner" class="nav-button" type="button" role="tab" aria-selected="false" aria-controls="panel-planner" data-panel="planner" tabindex="-1">Weather &amp; Smoke</button>
+          <button id="helpButton" class="nav-button nav-button--utility" type="button">User Help</button>
+        </div>
+      </nav>
+
+      <main id="main-content" class="workspace" tabindex="-1">
+        <section id="map-region" class="map-region" aria-labelledby="mapHeading">
+          <h2 id="mapHeading" class="sr-only">Interactive prescribed fire planning map</h2>
+          <p id="mapDescription" class="sr-only">
+            Interactive map showing prescribed burn units, smoke-screening graphics, and sensitive areas. The Burn list provides a keyboard-accessible text alternative.
+          </p>
+
+
+          <arcgis-map id="map" tabindex="0" popup-component-enabled attribution-mode="dark">
+            <arcgis-zoom slot="top-left"></arcgis-zoom>
+            <arcgis-home slot="top-left"></arcgis-home>
+            <arcgis-locate slot="top-left"></arcgis-locate>
+            <arcgis-expand slot="top-right" group="map-tools" expand-tooltip="Choose basemap">
+              <arcgis-basemap-gallery reference-element="map"></arcgis-basemap-gallery>
+            </arcgis-expand>
+            <arcgis-expand slot="top-right" group="map-tools" expand-tooltip="Map layers">
+              <arcgis-layer-list reference-element="map"></arcgis-layer-list>
+            </arcgis-expand>
+            <arcgis-expand slot="top-right" group="map-tools" expand-tooltip="Map legend">
+              <arcgis-legend reference-element="map"></arcgis-legend>
+            </arcgis-expand>
+            <arcgis-scale-bar slot="bottom-left" unit="dual"></arcgis-scale-bar>
+          </arcgis-map>
+
+          <button id="mapToolsToggle" class="map-tools-toggle glass-button is-pressed" type="button" aria-expanded="true" aria-controls="mapToolsDrawer">
+            Map tools
+          </button>
+
+          <aside id="mapToolsDrawer" class="map-tools-drawer" aria-label="Map tools">
+            <div class="drawer-header">
+              <h3>Map tools</h3>
+              <button id="closeMapTools" class="icon-button" type="button" aria-label="Close map tools">×</button>
+            </div>
+            <div class="drawer-tabs" role="tablist" aria-label="Map tool categories">
+              <button class="drawer-tab is-active" type="button" role="tab" aria-selected="true" data-tool="identify">Identify</button>
+              <button class="drawer-tab" type="button" role="tab" aria-selected="false" data-tool="draw" tabindex="-1">Draw</button>
+              <button class="drawer-tab" type="button" role="tab" aria-selected="false" data-tool="legend" tabindex="-1">Legend</button>
+            </div>
+
+            <section class="drawer-panel" data-tool-panel="identify">
+              <div id="identifyEmpty">
+                <h4>Identify burn unit</h4>
+                <p>Select a burn polygon or flame marker on the map. Details and management actions will appear here.</p>
+              </div>
+              <div id="identifyContent" hidden>
+                <div class="drawer-unit-heading">
+                  <div>
+                    <p class="section-kicker">Selected burn unit</p>
+                    <h4 id="identifyName">—</h4>
+                  </div>
+                  <span id="identifyScore" class="score-badge score-unknown">Not scored</span>
+                </div>
+                <dl id="identifyDetails" class="detail-list"></dl>
+                <div class="stacked-actions">
+                  <button id="manageSelectedUnit" class="primary-button" type="button">Manage burn unit</button>
+                  <button id="updateSelectedForecast" class="secondary-button" type="button">Update forecast data</button>
+                </div>
+                <details class="conditions-disclosure">
+                  <summary>Preferred burn conditions</summary>
+                  <dl id="identifyConditions" class="detail-list detail-list--compact"></dl>
+                </details>
+              </div>
+              <div class="map-selection-actions">
+                <button
+                  id="clearMapSelectionButton"
+                  class="secondary-button"
+                  type="button"
+                  disabled
+                  aria-label="Clear the selected burn unit and point-forecast location"
+                >Clear selection</button>
+              </div>
+            </section>
+
+            <section class="drawer-panel" data-tool-panel="draw" hidden>
+              <h4>Create burn unit shape</h4>
+              <div class="stacked-actions">
+                <button id="drawSquareButton" class="primary-button" type="button">Generate simple square</button>
+                <button id="drawPolygonButton" class="primary-button" type="button">Draw complex polygon</button>
+                <div class="button-row">
+                  <button id="clearDrawingButton" class="danger-button" type="button">Clear drawing</button>
+                  <button id="saveDrawingButton" class="secondary-button" type="button" disabled>Save drawing</button>
+                </div>
+              </div>
+              <p class="acre-display">Drawn acres: <strong id="drawnAcres">0.00</strong></p>
+              <div id="drawInstructions" class="instruction-card">
+                Navigate to the desired location, then select a draw option. Burn units must be between 1 and 100,000 acres.
+              </div>
+            </section>
+
+            <section class="drawer-panel" data-tool-panel="legend" hidden>
+              <h4>Burn forecast score</h4>
+              <ul class="legend-list">
+                <li><span class="legend-symbol legend-symbol--high" aria-hidden="true"></span><span><strong>High:</strong> 75–100% of preferred conditions met</span></li>
+                <li><span class="legend-symbol legend-symbol--medium" aria-hidden="true"></span><span><strong>Medium:</strong> 40–74% met</span></li>
+                <li><span class="legend-symbol legend-symbol--low" aria-hidden="true"></span><span><strong>Low:</strong> less than 40% met</span></li>
+                <li><span class="legend-symbol legend-symbol--unknown" aria-hidden="true"></span><span><strong>Inactive or undefined:</strong> conditions not scored</span></li>
+              </ul>
+              <h4>Map layers</h4>
+              <div id="layerToggles" class="layer-toggles"></div>
+            </section>
+          </aside>
+
+          <div id="demoBanner" class="data-status-banner" hidden>
+            <strong></strong>
+            <span></span>
+          </div>
+
+          <div class="map-instruction" role="note">Select a burn unit for details, or click an empty map location for a point forecast.</div>
+        </section>
+
+        <aside id="operations-panel" class="operations-panel" aria-label="Prescribed fire operations information">
+          <section id="panel-overview" class="panel-view" role="tabpanel" aria-labelledby="tab-overview" data-view="overview">
+            <div class="panel-heading-row">
+              <div>
+                <p class="section-kicker">Operational picture</p>
+                <h2>Prescribed Fire Dashboard</h2>
+              </div>
+              <span id="dataModeBadge" class="mode-badge">Loading</span>
+            </div>
+
+            <div class="kpi-grid" aria-label="Prescribed fire summary">
+              <article class="kpi-card"><span class="kpi-label">Total Burn Units</span><strong id="kpiTotalBurns" class="kpi-value">—</strong></article>
+              <article class="kpi-card"><span class="kpi-label">Active Units</span><strong id="kpiActiveBurns" class="kpi-value">—</strong></article>
+              <article class="kpi-card"><span class="kpi-label">Planned Acres</span><strong id="kpiPlannedAcres" class="kpi-value">—</strong></article>
+              <article class="kpi-card"><span class="kpi-label">High-Score Days</span><strong id="kpiGoDays" class="kpi-value">—</strong></article>
+            </div>
+
+            <section class="content-section collapsible-section" aria-labelledby="alertHeading">
+              <div class="section-heading-row">
+                <h3 id="alertHeading">Active NWS Fire-Weather Alerts</h3>
+                <div class="section-heading-actions">
+                  <span id="alertStatus" class="quiet-status">Checking…</span>
+                  <button class="section-collapse-button" type="button" aria-expanded="true" aria-controls="alertSectionBody" data-collapse-label="Active NWS Fire-Weather Alerts">
+                    <span aria-hidden="true">−</span>
+                    <span class="sr-only">Collapse Active NWS Fire-Weather Alerts</span>
+                  </button>
+                </div>
+              </div>
+              <div id="alertSectionBody" class="collapsible-content" role="region" aria-labelledby="alertHeading">
+                <div id="weatherAlerts" class="alert-list" aria-live="polite"></div>
+              </div>
+            </section>
+
+            <section class="content-section collapsible-section" aria-labelledby="nextBurnHeading">
+              <div class="section-heading-row">
+                <h3 id="nextBurnHeading">Priority Burn Units</h3>
+                <div class="section-heading-actions">
+                  <button class="text-button" type="button" data-open-panel="list">View Burn List</button>
+                  <button class="section-collapse-button" type="button" aria-expanded="true" aria-controls="prioritySectionBody" data-collapse-label="Priority Burn Units">
+                    <span aria-hidden="true">−</span>
+                    <span class="sr-only">Collapse Priority Burn Units</span>
+                  </button>
+                </div>
+              </div>
+              <div id="prioritySectionBody" class="collapsible-content" role="region" aria-labelledby="nextBurnHeading">
+                <div id="overviewBurnList" class="compact-list" aria-live="polite"></div>
+              </div>
+            </section>
+
+            <section class="content-section external-tools collapsible-section" aria-labelledby="externalToolsHeading">
+              <div class="section-heading-row">
+                <h3 id="externalToolsHeading">Planning Resources</h3>
+                <button class="section-collapse-button" type="button" aria-expanded="true" aria-controls="planningResourcesBody" data-collapse-label="Planning Resources">
+                  <span aria-hidden="true">−</span>
+                  <span class="sr-only">Collapse Planning Resources</span>
+                </button>
+              </div>
+              <div id="planningResourcesBody" class="collapsible-content" role="region" aria-labelledby="externalToolsHeading">
+                <div class="resource-grid">
+                  <a id="spotForecastDashboardLink" class="resource-card resource-card--primary" target="_blank" rel="noopener noreferrer">
+                    <strong>Request NWS Spot Forecast</strong>
+                    <span>Open the official NWS request form.</span>
+                  </a>
+                  <a id="nwsFireWeatherLink" class="resource-card" target="_blank" rel="noopener noreferrer"><strong>NWS Fire Weather</strong><span>Regional fire-weather information.</span></a>
+                  <a id="watchDutyLink" class="resource-card" target="_blank" rel="noopener noreferrer"><strong>Watch Duty</strong><span>Incident awareness.</span></a>
+                  <a id="burnProLink" class="resource-card" target="_blank" rel="noopener noreferrer"><strong>BurnPro3D</strong><span>Fire-behavior planning tool.</span></a>
+                </div>
+              </div>
+            </section>
+          </section>
+
+          <section id="panel-map" class="panel-view" role="tabpanel" aria-labelledby="tab-map" data-view="map" hidden>
+            <div class="panel-heading-row">
+              <div><p class="section-kicker">Map workflow</p><h2>Burn Map</h2></div>
+              <button id="openMapToolsFromPanel" class="secondary-button" type="button">Open Map Tools</button>
+            </div>
+            <ol class="workflow-list">
+              <li><strong>Find a location.</strong> Pan and zoom the map or use the locate control to move to your current position.</li>
+              <li><strong>Review context.</strong> Change basemaps and turn operational or sensitive-area layers on and off.</li>
+              <li><strong>Draw or identify.</strong> Use the Map tools drawer to create a burn unit or inspect an existing unit.</li>
+              <li><strong>Save and plan.</strong> Enter unit details, preferred conditions, forecast data, smoke screening, and burn events.</li>
+            </ol>
+            <div class="callout callout--warning">
+              <strong>Operational Limitation</strong>
+              <p>Map graphics and model outputs support planning only. Verify boundaries, permits, smoke-management requirements, and field conditions through approved agency processes.</p>
+            </div>
+            <div class="workflow-actions">
+              <button class="primary-button" type="button" data-map-tool="draw">Draw Unit</button>
+              <button class="secondary-button" type="button" data-map-tool="legend">Legend</button>
+              <button class="secondary-button" type="button" data-open-panel="list">Burn List</button>
+            </div>
+          </section>
+
+          <section id="panel-list" class="panel-view panel-view--wide" role="tabpanel" aria-labelledby="tab-list" data-view="list" hidden>
+            <div class="panel-heading-row">
+              <div><p class="section-kicker">Records and filters</p><h2>Burn List</h2></div>
+              <span id="burnResultCount" class="result-count" aria-live="polite">0 records</span>
+            </div>
+
+            <details class="filter-disclosure" open>
+              <summary>Filter Burn Units</summary>
+              <form id="burnFilters" class="advanced-filter-grid" aria-label="Filter prescribed burn units">
+                <fieldset>
+                  <legend>Status</legend>
+                  <div id="filterStatusOptions" class="filter-domain-options"></div>
+                </fieldset>
+                <div class="field-group"><label for="burnSearch">Burn Unit Name</label><input id="burnSearch" type="search" autocomplete="off" /></div>
+                <div class="field-group"><label for="parkFilter">Park Unit</label><select id="parkFilter"><option value="">All park units</option></select></div>
+                <fieldset>
+                  <legend>Priority</legend>
+                  <div id="filterPriorityOptions" class="filter-domain-options"></div>
+                </fieldset>
+                <fieldset>
+                  <legend>Burn Window</legend>
+                  <div id="filterBurnWindowOptions" class="filter-domain-options"></div>
+                </fieldset>
+                <div class="field-group"><label for="fuelFilter">Primary Fuel</label><select id="fuelFilter"><option value="">All fuel types</option></select></div>
+                <div class="field-group"><label for="ignitionFilter">Ignition Method</label><select id="ignitionFilter"><option value="">All ignition methods</option></select></div>
+                <label class="switch-row" for="filterGoDays"><span>Upcoming high-score days</span><input id="filterGoDays" type="checkbox" role="switch" /></label>
+                <div class="field-group"><label for="lastBurnedFrom">Last Burned Year (From)</label><input id="lastBurnedFrom" type="number" min="1900" max="2100" /></div>
+                <div class="field-group"><label for="lastBurnedTo">Last Burned Year (To)</label><input id="lastBurnedTo" type="number" min="1900" max="2100" /></div>
+                <div class="field-group"><label for="localityFilter">Locality / County</label><select id="localityFilter"><option value="">All localities</option></select></div>
+                <div class="filter-actions"><button id="resetFilters" class="secondary-button" type="reset">Reset</button><button class="primary-button" type="submit">Apply Filters</button></div>
+              </form>
+            </details>
+
+            <div class="table-scroll" tabindex="0" aria-label="Scrollable prescribed burn unit table">
+              <table class="burn-table">
+                <thead>
+                  <tr>
+                    <th scope="col"><button class="sort-button" type="button" data-sort="name">Name ↕</button></th>
+                    <th scope="col">Burn Status</th>
+                    <th scope="col">7-day Burn Forecast</th>
+                    <th scope="col">Locality</th>
+                    <th scope="col">Priority</th>
+                    <th scope="col">Acres</th>
+                    <th scope="col">Last Burned</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="burnTableBody"></tbody>
+              </table>
+            </div>
+            <ol id="burnCardList" class="burn-card-list" aria-live="polite"></ol>
+            <div class="pagination-row">
+              <label for="rowsPerPage">Show</label>
+              <select id="rowsPerPage"><option>10</option><option selected>25</option><option>50</option></select>
+              <div class="pagination-controls"><button id="prevPage" class="icon-button" type="button" aria-label="Previous page">‹</button><span id="pageStatus">Page 1 of 1</span><button id="nextPage" class="icon-button" type="button" aria-label="Next page">›</button></div>
+            </div>
+          </section>
+
+          <section id="panel-unit" class="panel-view" role="tabpanel" aria-label="Burn unit management" data-view="unit" hidden>
+            <div class="panel-heading-row">
+              <div><p class="section-kicker">Burn unit overview</p><h2 id="unitTitle">Select a Burn Unit</h2></div>
+              <button id="backToListButton" class="text-button" type="button">Back to Burn List</button>
+            </div>
+            <nav class="unit-subnav" aria-label="Burn unit sections">
+              <button class="unit-subnav-button is-active" type="button" data-unit-section="details">Overview</button>
+              <button class="unit-subnav-button" type="button" data-unit-section="weather">Weather &amp; Smoke</button>
+              <button class="unit-subnav-button" type="button" data-unit-section="events">Burn Events</button>
+            </nav>
+
+            <div id="unitDetailsSection" data-unit-section-panel="details">
+              <section class="content-section">
+                <div class="section-heading-row"><h3>Burn Details</h3><button id="editUnitDetailsButton" class="text-button" type="button">Edit</button></div>
+                <dl id="unitDetailsGrid" class="details-grid"></dl>
+                <div class="button-row button-row--wrap">
+                  <button id="editBurnAreaButton" class="secondary-button" type="button">Edit Burn Area</button>
+                  <button id="toggleUnitStatusButton" class="danger-button" type="button">Inactivate Burn Unit</button>
+                </div>
+              </section>
+
+              <section class="content-section">
+                <div class="section-heading-row"><h3>Notifications</h3><label class="switch-row switch-row--inline"><span>Email Notifications</span><input id="notificationToggle" type="checkbox" role="switch" /></label></div>
+                <p class="panel-help">Email delivery requires an approved notification service. Subscriber entries are not emailed until that service is configured.</p>
+                <div id="subscriberList" class="subscriber-list"></div>
+                <form id="subscriberForm" class="subscriber-form">
+                  <div class="field-group"><label for="subscriberName">Subscriber Name</label><input id="subscriberName" required /></div>
+                  <div class="field-group"><label for="subscriberEmail">Subscriber Email</label><input id="subscriberEmail" type="email" required /></div>
+                  <button class="primary-button" type="submit">Add Subscriber</button>
+                </form>
+              </section>
+            </div>
+
+            <div id="unitWeatherSection" data-unit-section-panel="weather" hidden>
+              <section class="content-section">
+                <div class="section-heading-row"><h3>Preferred Weather Conditions</h3><button id="editConditionsButton" class="text-button" type="button">Edit Conditions</button></div>
+                <dl id="preferredConditionsSummary" class="details-grid details-grid--compact"></dl>
+              </section>
+
+              <section class="content-section smoke-section">
+                <div class="section-heading-row"><h3>Conceptual Smoke Screening</h3><label class="switch-row switch-row--inline"><span>Smoke Plume</span><input id="smokeToggle" type="checkbox" role="switch" checked /></label></div>
+                <div class="smoke-controls">
+                  <div class="field-group"><label for="transportDirection">Transport Wind Direction</label><select id="transportDirection"></select></div>
+                  <div class="field-group"><label for="directionalDegrees">Directional Spread</label><select id="directionalDegrees"><option value="15">15°</option><option value="30" selected>30°</option><option value="45">45°</option><option value="60">60°</option></select></div>
+                  <div class="field-group"><label for="plumeDistance">Screening Distance</label><select id="plumeDistance"><option value="5">5 miles</option><option value="10" selected>10 miles</option><option value="20">20 miles</option><option value="30">30 miles</option></select></div>
+                  <button id="resetSmokeButton" class="secondary-button" type="button">Reset</button>
+                </div>
+                <p class="source-note">This is a simplified screening visualization, not a dispersion model. It uses one point and a user-selected wind direction. Smoke may affect areas outside the shaded plume.</p>
+              </section>
+
+              <section class="content-section">
+                <h3>Smoke-Sensitive Areas</h3>
+                <div id="sensitiveAreaSummary" class="sensitive-summary"></div>
+              </section>
+
+              <section class="content-section">
+                <div class="section-heading-row"><div><h3>Weather / Fire-Behavior Factors</h3><p id="forecastUpdated" class="quiet-status">Not Updated</p></div><div class="button-row"><button id="refreshUnitForecastButton" class="secondary-button" type="button">Update Forecast Data</button><button id="editConditionsButton2" class="secondary-button" type="button">Edit Conditions</button></div></div>
+                <div class="table-scroll" tabindex="0" aria-label="Scrollable seven-day burn forecast table">
+                  <table class="forecast-matrix"><thead id="forecastMatrixHead"></thead><tbody id="forecastMatrixBody"></tbody></table>
+                </div>
+                <div class="resource-links-row resource-links-row--three">
+                  <a id="spotForecastUnitLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a>
+                  <a id="pointForecastLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Point Forecast</a>
+                  <a id="fireWeatherDashboardUnitLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">Fire Weather Dashboard</a>
+                </div>
+              </section>
+            </div>
+
+            <div id="unitEventsSection" data-unit-section-panel="events" hidden>
+              <section class="content-section">
+                <div class="section-heading-row"><div><h3>Burn Events</h3><p class="panel-help">Maintain planned and completed burn history for this unit.</p></div><button id="addBurnEventButton" class="primary-button" type="button">Add New Burn Event</button></div>
+                <div class="table-scroll" tabindex="0" aria-label="Scrollable burn event table">
+                  <table class="event-table"><thead><tr><th scope="col">Planned Date</th><th scope="col">Actual Date</th><th scope="col">Canceled</th><th scope="col">Treatment Type</th><th scope="col">Planned Acres</th><th scope="col">Actual Acres</th><th scope="col">Actions</th></tr></thead><tbody id="eventTableBody"></tbody></table>
+                </div>
+              </section>
+            </div>
+          </section>
+
+          <section id="panel-planner" class="panel-view" role="tabpanel" aria-labelledby="tab-planner" data-view="planner" hidden>
+            <div class="panel-heading-row"><div><p class="section-kicker">National Weather Service</p><h2>Point Forecast and Planning Links</h2></div><span id="weatherLoading" class="quiet-status" aria-live="polite">Select a Location</span></div>
+            <div id="weatherEmpty" class="empty-state"><h3>No Location Selected</h3><p>Click a location on the map or select a burn unit to retrieve a National Weather Service forecast.</p><button id="focusMapButton" class="primary-button" type="button">Go To Map</button></div>
+            <div id="weatherContent" hidden>
+              <section class="weather-summary" aria-labelledby="weatherLocation"><div><p id="weatherCoordinates" class="section-kicker"></p><h3 id="weatherLocation">Selected location</h3></div><div class="current-condition"><strong id="weatherTemperature">—</strong><span id="weatherShortForecast">—</span></div></section>
+              <dl class="condition-grid"><div><dt>Relative humidity</dt><dd id="weatherHumidity">—</dd></div><div><dt>Wind</dt><dd id="weatherWind">—</dd></div><div><dt>Wind gust</dt><dd id="weatherGust">—</dd></div><div><dt>Precipitation</dt><dd id="weatherPrecip">—</dd></div></dl>
+              <section class="content-section"><h3>Next 12 Hours</h3><div class="table-scroll" tabindex="0" aria-label="Scrollable hourly weather forecast table"><table class="forecast-table"><thead><tr><th scope="col">Time</th><th scope="col">Conditions</th><th scope="col">Temp.</th><th scope="col">RH</th><th scope="col">Wind</th><th scope="col">Gust</th></tr></thead><tbody id="hourlyForecastRows"></tbody></table></div></section>
+              <div class="resource-links-row"><a id="spotForecastPlannerLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a><a id="forecastOfficeLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Forecast Office</a></div>
+              <p class="source-note">Forecasts are planning information and do not replace an approved burn plan, official spot forecast, permit, smoke-management authorization, or field go/no-go determination.</p>
+            </div>
+          </section>
+        </aside>
+      </main>
+
+      <footer class="app-footer"><p>Planning support only. Verify current permits, approved burn prescriptions, air-quality requirements, staffing, and field conditions before ignition.</p><p id="supportContact"></p></footer>
+    </div>
+
+    <div id="liveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+    <dialog id="unitDialog" class="app-dialog app-dialog--wide" aria-labelledby="unitDialogTitle">
+      <form id="unitForm" method="dialog">
+        <div class="dialog-header"><div><p class="section-kicker">Burn unit record</p><h2 id="unitDialogTitle">Save Burn Unit Details</h2></div><button class="icon-button" type="button" data-close-dialog="unitDialog" aria-label="Close burn unit form">×</button></div>
+        <div class="dialog-content form-grid">
+          <input id="unitId" type="hidden" />
+          <div class="field-group field-group--wide"><label for="unitName">Burn Unit Name <span aria-hidden="true">*</span></label><input id="unitName" maxlength="80" required /></div>
+          <div class="field-group"><label for="unitPark">Park Unit <span aria-hidden="true">*</span></label><select id="unitPark" required><option value="">Select park unit</option></select></div>
+          <div class="field-group"><label for="unitBurnWindow">Burn Window <span aria-hidden="true">*</span></label><select id="unitBurnWindow" required><option value="">Select burn window</option></select></div>
+          <div class="field-group"><label for="unitAcres">Drawn Acres</label><input id="unitAcres" type="number" min="1" max="100000" step="0.01" readonly /></div>
+          <div class="field-group"><label for="unitState">State <span aria-hidden="true">*</span></label><select id="unitState" required><option value="">Select state</option></select></div>
+          <div class="field-group"><label for="unitLocality">Locality / County <span aria-hidden="true">*</span></label><select id="unitLocality" required><option value="">Select locality</option></select></div>
+          <div class="field-group"><label for="unitStatus">Status <span aria-hidden="true">*</span></label><select id="unitStatus" required><option value="">Select status</option></select></div>
+          <div class="field-group"><label for="unitPriority">Priority <span aria-hidden="true">*</span></label><select id="unitPriority" required><option value="">Select priority</option></select></div>
+          <div class="field-group"><label for="unitFuel">Primary Fuel <span aria-hidden="true">*</span></label><select id="unitFuel" required><option value="">Select primary fuel</option></select></div>
+          <div class="field-group"><label for="unitIgnition">Ignition Method <span aria-hidden="true">*</span></label><select id="unitIgnition" required><option value="">Select ignition method</option></select></div>
+          <div class="field-group field-group--wide"><label for="unitObjective">Primary Objective</label><input id="unitObjective" /></div>
+          <div class="field-group field-group--wide"><label for="unitNotes">Notes</label><textarea id="unitNotes" rows="4"></textarea></div>
+        </div>
+        <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="unitDialog">Cancel</button><button id="saveUnitButton" class="primary-button" type="submit">Save Burn Unit</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="conditionsDialog" class="app-dialog app-dialog--wide" aria-labelledby="conditionsDialogTitle">
+      <form id="conditionsForm" method="dialog">
+        <div class="dialog-header"><div><p class="section-kicker">Burn prescription</p><h2 id="conditionsDialogTitle">Edit Preferred Weather Conditions</h2></div><button class="icon-button" type="button" data-close-dialog="conditionsDialog" aria-label="Close preferred conditions form">×</button></div>
+        <div id="conditionsFields" class="dialog-content conditions-grid"></div>
+        <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="conditionsDialog">Cancel</button><button class="primary-button" type="submit">Save Conditions</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="eventDialog" class="app-dialog app-dialog--wide" aria-labelledby="eventDialogTitle">
+      <form id="eventForm" method="dialog">
+        <div class="dialog-header"><div><p class="section-kicker">Burn History</p><h2 id="eventDialogTitle">Add Burn Event</h2></div><button class="icon-button" type="button" data-close-dialog="eventDialog" aria-label="Close burn event form">×</button></div>
+        <div class="dialog-content form-grid">
+          <input id="eventId" type="hidden" />
+          <div class="field-group"><label for="plannedBurnDate">Planned Burn Date <span aria-hidden="true">*</span></label><input id="plannedBurnDate" type="date" required /></div>
+          <div class="field-group"><label for="actualBurnDate">Actual Burn Date</label><input id="actualBurnDate" type="date" /></div>
+          <label class="switch-row field-group--wide"><span>Burn Canceled</span><input id="burnCanceled" type="checkbox" role="switch" /></label>
+          <div class="field-group"><label for="treatmentType">RX Fire Treatment Type <span aria-hidden="true">*</span></label><select id="treatmentType" required><option value="">Select Treatment</option><option>Broadcast Burn</option><option>Machine Pile Burn</option><option>Hand Pile Burn</option></select></div>
+          <div class="field-group"><label for="plannedAcres">Planned Acres <span aria-hidden="true">*</span></label><input id="plannedAcres" type="number" min="0" step="0.01" required /></div>
+          <div class="field-group"><label for="actualAcres">Actual Acres Burned</label><input id="actualAcres" type="number" min="0" step="0.01" /></div>
+          <div class="field-group field-group--wide"><label for="eventNotes">Burn Event Notes</label><textarea id="eventNotes" rows="4" placeholder="Ignition technique, weather and smoke conditions, intensity, coverage, effectiveness, and follow-up needs"></textarea></div>
+          <fieldset class="field-group field-group--wide"><legend>Actual Weather Conditions</legend><div id="actualWeatherFields" class="conditions-grid conditions-grid--nested"></div></fieldset>
+        </div>
+        <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="eventDialog">Cancel</button><button class="primary-button" type="submit">Save Burn Event</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmDialog" class="app-dialog" aria-labelledby="confirmTitle">
+      <div class="dialog-header"><div><p class="section-kicker">Confirm Action</p><h2 id="confirmTitle">Confirm</h2></div><button class="icon-button" type="button" data-close-dialog="confirmDialog" aria-label="Close confirmation">×</button></div>
+      <div class="dialog-content"><p id="confirmMessage"></p></div>
+      <div class="dialog-actions"><button id="confirmCancel" class="secondary-button" type="button">Cancel</button><button id="confirmAction" class="danger-button" type="button">Confirm</button></div>
+    </dialog>
+
+    <dialog id="helpDialog" class="app-dialog app-dialog--wide" aria-labelledby="helpTitle">
+      <div class="dialog-header"><div><p class="section-kicker">Help and Accessibility</p><h2 id="helpTitle">Using the Prescribed Fire Operations Hub</h2></div><button class="icon-button" type="button" data-close-dialog="helpDialog" aria-label="Close help">×</button></div>
+      <div class="dialog-content help-layout">
+        <section><h3>Core Workflow</h3><ol><li>Locate the proposed burn area.</li><li>Draw or select a burn unit.</li><li>Enter unit details and preferred conditions.</li><li>Review forecast scores and smoke-sensitive areas.</li><li>Request an official NWS Spot Forecast.</li><li>Document planned and completed burn events.</li></ol></section>
+        <section><h3>Keyboard and Non-Map Access</h3><p>Use Tab and Shift+Tab to move through controls. Arrow keys move among application tabs. Burn records, forecasts, and events are available in structured tables and text panels.</p></section>
+        <section><h3>Reference Guide</h3><p>The Tall Timbers guide supplied for this prototype is included as design reference material. California laws, agency policy, permit conditions, and local air-district requirements control State Parks operations.</p><a class="secondary-link-button" href="./docs/Tall-Timbers-Prescribed-Burn-Planner-User-Guide.pdf" target="_blank" rel="noopener noreferrer">Open Reference User Guide</a></section>
+        <section><h3>Report an Accessibility Issue</h3><p id="helpContact">Contact the application owner and describe the page, control, assistive technology, and browser involved.</p></section>
+      </div>
+    </dialog>
+
+
+    <dialog id="accountDialog" class="app-dialog" aria-labelledby="accountTitle">
+      <div class="dialog-header"><div><p class="section-kicker">User Account</p><h2 id="accountTitle">Authentication</h2></div><button class="icon-button" type="button" data-close-dialog="accountDialog" aria-label="Close account dialog">×</button></div>
+      <div class="dialog-content">
+        <p><strong>Status:</strong> <span id="accountStatus">Not signed in</span></p>
+        <p id="accountUser" class="panel-help">Configure ArcGIS OAuth in <code>config.js</code> to use organization-only maps and layers.</p>
+        <div class="button-row">
+          <button id="arcgisSignInButton" class="primary-button" type="button">Sign in with ArcGIS</button>
+          <button id="logoutButton" class="secondary-button" type="button" disabled>Log out</button>
+        </div>
+      </div>
+    </dialog>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
