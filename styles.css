@@ -320,7 +320,7 @@ arcgis-map { display: block; width: 100%; height: 100%; }
 .button-row--wrap { flex-wrap: wrap; }
 .button-row--wrap > * { flex: 0 1 auto; }
 
-.kpi-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0.7rem; }
+.kpi-grid { display: flex; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0.7rem; }
 .kpi-card {
   display: flex;
   min-height: 6.6rem;
