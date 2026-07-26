@@ -494,12 +494,15 @@ async function resolveAlertImpactLayer() {
     const url = await resolveFeatureLayerUrl(
       serviceUrl,
       impactConfig.parkBoundaryLayerId,
-      "California State Park boundaries for alert screening"
+      "State Park boundaries for alert screening"
     );
     const layer = new FeatureLayer({
       url,
-      title: "California State Park boundaries for alert screening",
-      outFields: [impactConfig.parkNameField || "UNITNAME"]
+      title: "State Park boundaries for alert screening",
+      outFields: [impactConfig.parkNameField || "UNITNAME"],
+      definitionExpression: impactConfig.definitionExpression || undefined,
+      popupEnabled: false,
+      listMode: "hide"
     });
     await layer.load();
     state.alertParkLayer = layer;
@@ -3141,9 +3144,9 @@ async function loadFireWeatherAlerts() {
       const card = buildAlertCard(alert);
       dom.weatherAlerts.append(card);
       updateAlertParkImpacts(alert, card).catch((error) => {
-        console.warn("State Park alert-impact screening did not complete.", error);
+        console.warn("Park-unit alert-impact screening did not complete.", error);
         const impact = card.querySelector("[data-alert-park-impact]");
-        if (impact) impact.textContent = "State Park overlap could not be determined.";
+        if (impact) impact.textContent = "Park-unit overlap could not be determined.";
       });
     }
   } catch (error) {
@@ -3187,7 +3190,7 @@ function buildAlertCard(feature) {
   const impact = document.createElement("span");
   impact.className = "alert-park-impact";
   impact.dataset.alertParkImpact = "";
-  impact.textContent = "Checking California State Park impacts…";
+  impact.textContent = "Checking park-unit impacts…";
 
   const alertUrl = getAlertUrl(feature);
   if (alertUrl) {
@@ -3209,14 +3212,20 @@ async function updateAlertParkImpacts(feature, card) {
   const impactElement = card.querySelector("[data-alert-park-impact]");
   if (!impactElement) return;
 
-  const result = await findAffectedParkUnits(feature);
+  const timeoutMs = Math.max(5000, Number(CONFIG.alertImpacts?.analysisTimeoutMs) || 20000);
+  const result = await withTimeout(
+    findAffectedParkUnits(feature),
+    timeoutMs,
+    `Park-unit overlap analysis exceeded ${Math.round(timeoutMs / 1000)} seconds.`
+  );
+
   if (result.status === "unavailable") {
-    impactElement.textContent = "State Park overlap unavailable for this alert.";
+    impactElement.textContent = "Park-unit overlap unavailable for this alert.";
     return;
   }
 
   if (!result.names.length) {
-    impactElement.textContent = "0 California State Park units intersect this alert.";
+    impactElement.textContent = "No park units intersect this alert.";
     return;
   }
 
@@ -3224,7 +3233,7 @@ async function updateAlertParkImpacts(feature, card) {
   const shown = result.names.slice(0, maxNames);
   const remainder = result.names.length - shown.length;
   const noun = result.names.length === 1 ? "unit" : "units";
-  impactElement.textContent = `${result.names.length} California State Park ${noun} affected: ${shown.join("; ")}${remainder > 0 ? `; and ${remainder} more` : ""}`;
+  impactElement.textContent = `${result.names.length} park ${noun} affected: ${shown.join("; ")}${remainder > 0 ? `; and ${remainder} more` : ""}`;
   impactElement.title = result.names.join("; ");
 }
 
@@ -3232,50 +3241,166 @@ async function findAffectedParkUnits(feature) {
   const layer = state.alertParkLayer || state.layers.parks;
   if (!layer) return { status: "unavailable", names: [] };
 
-  const geometries = geoJsonToArcGISPolygons(feature.geometry);
-  if (!geometries.length) {
-    const zoneGeometries = await fetchAlertZoneGeometries(feature.properties?.affectedZones);
-    geometries.push(...zoneGeometries);
+  try {
+    await layer.load();
+  } catch (error) {
+    console.warn("The park-boundary analysis layer is not available.", error);
+    return { status: "unavailable", names: [] };
   }
-  if (!geometries.length) return { status: "unavailable", names: [] };
 
   const nameField = resolveParkNameField(layer);
   if (!nameField) return { status: "unavailable", names: [] };
 
-  let queryGeometry = geometries[0];
-  if (geometries.length > 1) {
-    try {
-      queryGeometry = state.modules.geometryEngine.union(geometries) || geometries[0];
-    } catch (error) {
-      console.warn("NWS alert-zone geometries could not be unioned; using the first geometry.", error);
+  const directGeometries = geoJsonToArcGISPolygons(feature.geometry);
+  if (directGeometries.length) {
+    const directResult = await queryAffectedParkNames(layer, nameField, directGeometries);
+    if (directResult.status === "available" && directResult.names.length) return directResult;
+
+    // Some CAP alerts include a geometry that is generalized or unsuitable
+    // for the layer query. Retry with the alert's linked NWS zone polygons.
+    const zoneGeometries = await fetchAlertZoneGeometries(feature.properties?.affectedZones);
+    if (zoneGeometries.length) {
+      const zoneResult = await queryAffectedParkNames(layer, nameField, zoneGeometries);
+      if (zoneResult.status === "available") return zoneResult;
     }
+    return directResult;
   }
 
+  const zoneGeometries = await fetchAlertZoneGeometries(feature.properties?.affectedZones);
+  if (!zoneGeometries.length) return { status: "unavailable", names: [] };
+  return queryAffectedParkNames(layer, nameField, zoneGeometries);
+}
+
+async function queryAffectedParkNames(layer, nameField, geometries) {
+  const prepared = geometries
+    .map((geometry) => prepareAlertGeometryForLayer(geometry, layer))
+    .filter(Boolean);
+  if (!prepared.length) return { status: "unavailable", names: [] };
+
+  const queryGeometries = groupAlertQueryGeometries(prepared, 8);
+  const concurrency = Math.max(1, Number(CONFIG.alertImpacts?.spatialQueryConcurrency) || 3);
+  const queryResults = await mapWithConcurrency(
+    queryGeometries,
+    concurrency,
+    (geometry) => queryParkNamesByGeometry(layer, nameField, geometry)
+  );
+
+  const names = new Set();
+  let successfulQueries = 0;
+  for (const result of queryResults) {
+    if (result.status !== "fulfilled") {
+      console.warn("A park-unit spatial query failed.", result.reason);
+      continue;
+    }
+    successfulQueries += 1;
+    for (const name of result.value) names.add(name);
+  }
+
+  return {
+    status: successfulQueries ? "available" : "unavailable",
+    names: [...names].sort((a, b) => a.localeCompare(b))
+  };
+}
+
+function groupAlertQueryGeometries(geometries, chunkSize = 8) {
+  const grouped = [];
+  const size = Math.max(1, Number(chunkSize) || 8);
+  for (let index = 0; index < geometries.length; index += size) {
+    const chunk = geometries.slice(index, index + size);
+    if (chunk.length === 1) {
+      grouped.push(chunk[0]);
+      continue;
+    }
+    try {
+      const unioned = state.modules.geometryEngine.union(chunk);
+      if (unioned) {
+        grouped.push(unioned);
+        continue;
+      }
+    } catch (error) {
+      console.warn("A group of NWS alert-zone geometries could not be unioned; querying the individual geometries instead.", error);
+    }
+    grouped.push(...chunk);
+  }
+  return grouped;
+}
+
+function prepareAlertGeometryForLayer(geometry, layer) {
+  if (!geometry) return null;
+  let prepared = geometry;
+  try {
+    prepared = state.modules.geometryEngine.simplify(geometry) || geometry;
+  } catch (error) {
+    console.warn("An NWS alert geometry could not be simplified.", error);
+  }
+
+  const targetSpatialReference = layer?.spatialReference;
+  const sourceSpatialReference = prepared.spatialReference;
+  if (!targetSpatialReference || !sourceSpatialReference || spatialReferencesMatch(sourceSpatialReference, targetSpatialReference)) {
+    return prepared;
+  }
+
+  const sourceWkid = getSpatialReferenceWkid(sourceSpatialReference);
+  const targetWkid = getSpatialReferenceWkid(targetSpatialReference);
+  const sourceIsWgs84 = sourceWkid === 4326;
+  const targetIsWgs84 = targetWkid === 4326;
+  const sourceIsWebMercator = [3857, 102100, 102113].includes(sourceWkid);
+  const targetIsWebMercator = [3857, 102100, 102113].includes(targetWkid);
+
+  try {
+    if (sourceIsWgs84 && targetIsWebMercator) {
+      return state.modules.webMercatorUtils.geographicToWebMercator(prepared) || prepared;
+    }
+    if (sourceIsWebMercator && targetIsWgs84) {
+      return state.modules.webMercatorUtils.webMercatorToGeographic(prepared) || prepared;
+    }
+  } catch (error) {
+    console.warn("An NWS alert geometry could not be projected for the park-boundary query.", error);
+  }
+
+  // FeatureLayer.queryFeatures includes the input spatial reference in the
+  // request, so the service can project other supported coordinate systems.
+  return prepared;
+}
+
+function spatialReferencesMatch(first, second) {
+  if (!first || !second) return false;
+  if (typeof first.equals === "function") return first.equals(second);
+  return getSpatialReferenceWkid(first) === getSpatialReferenceWkid(second);
+}
+
+function getSpatialReferenceWkid(spatialReference) {
+  return Number(spatialReference?.latestWkid || spatialReference?.wkid || 0);
+}
+
+async function queryParkNamesByGeometry(layer, nameField, geometry) {
   const query = layer.createQuery();
   query.where = "1=1";
-  query.geometry = queryGeometry;
+  query.geometry = geometry;
   query.spatialRelationship = "intersects";
   query.returnGeometry = false;
   query.outFields = [nameField];
 
-  try {
-    const results = await layer.queryFeatures(query);
-    const names = new Set();
-    for (const park of results.features || []) {
-      const name = safeText(park.attributes?.[nameField], "").trim();
-      if (name) names.add(name);
-    }
-    return { status: "available", names: [...names].sort((a, b) => a.localeCompare(b)) };
-  } catch (error) {
-    console.warn("State Park alert-impact query failed.", error);
-    return { status: "unavailable", names: [] };
+  const results = await layer.queryFeatures(query);
+  const names = new Set();
+  for (const park of results.features || []) {
+    const name = safeText(park.attributes?.[nameField], "").trim();
+    if (name) names.add(name);
   }
+  return [...names];
 }
 
 async function fetchAlertZoneGeometries(zoneUrls) {
-  const urls = Array.isArray(zoneUrls) ? zoneUrls.filter((url) => typeof url === "string" && url.startsWith("https://")) : [];
-  const limit = Math.max(1, Number(CONFIG.alertImpacts?.maxAffectedZonesToFetch) || 30);
-  const results = await Promise.allSettled(urls.slice(0, limit).map(fetchCachedAlertZoneGeometries));
+  const urls = Array.isArray(zoneUrls)
+    ? [...new Set(zoneUrls.filter((url) => typeof url === "string" && url.startsWith("https://")))]
+    : [];
+  const limit = Math.max(1, Number(CONFIG.alertImpacts?.maxAffectedZonesToFetch) || 50);
+  const concurrency = Math.max(1, Number(CONFIG.alertImpacts?.zoneFetchConcurrency) || 6);
+  const results = await mapWithConcurrency(
+    urls.slice(0, limit),
+    concurrency,
+    fetchCachedAlertZoneGeometries
+  );
   return results.flatMap((result) => result.status === "fulfilled" ? result.value : []);
 }
 
@@ -3297,18 +3422,86 @@ function geoJsonToArcGISPolygons(geometry) {
   const { Polygon } = state.modules;
   const spatialReference = { wkid: 4326 };
 
+  const makePolygon = (rings) => {
+    if (!Array.isArray(rings) || !rings.length) return null;
+    const normalizedRings = rings
+      .map((ring, index) => normalizeGeoJsonRing(ring, index === 0))
+      .filter(Boolean);
+    if (!normalizedRings.length) return null;
+    return new Polygon({ rings: normalizedRings, spatialReference });
+  };
+
   if (geometry.type === "Polygon" && Array.isArray(geometry.coordinates)) {
-    return [new Polygon({ rings: geometry.coordinates, spatialReference })];
+    const polygon = makePolygon(geometry.coordinates);
+    return polygon ? [polygon] : [];
   }
   if (geometry.type === "MultiPolygon" && Array.isArray(geometry.coordinates)) {
-    return geometry.coordinates
-      .filter(Array.isArray)
-      .map((rings) => new Polygon({ rings, spatialReference }));
+    return geometry.coordinates.map(makePolygon).filter(Boolean);
   }
   if (geometry.type === "GeometryCollection" && Array.isArray(geometry.geometries)) {
     return geometry.geometries.flatMap(geoJsonToArcGISPolygons);
   }
   return [];
+}
+
+function normalizeGeoJsonRing(ring, isExterior) {
+  if (!Array.isArray(ring)) return null;
+  const coordinates = ring
+    .filter((coordinate) => Array.isArray(coordinate) && Number.isFinite(Number(coordinate[0])) && Number.isFinite(Number(coordinate[1])))
+    .map((coordinate) => [Number(coordinate[0]), Number(coordinate[1])]);
+  if (coordinates.length < 3) return null;
+
+  const first = coordinates[0];
+  const last = coordinates[coordinates.length - 1];
+  if (first[0] !== last[0] || first[1] !== last[1]) coordinates.push([...first]);
+  if (coordinates.length < 4) return null;
+
+  // GeoJSON and ArcGIS use opposite ring-orientation conventions. ArcGIS
+  // expects exterior rings clockwise and holes counterclockwise.
+  const isCounterClockwise = signedRingArea(coordinates) > 0;
+  const shouldBeCounterClockwise = !isExterior;
+  if (isCounterClockwise !== shouldBeCounterClockwise) coordinates.reverse();
+  return coordinates;
+}
+
+function signedRingArea(ring) {
+  let area = 0;
+  for (let index = 0; index < ring.length - 1; index += 1) {
+    const [x1, y1] = ring[index];
+    const [x2, y2] = ring[index + 1];
+    area += (x1 * y2) - (x2 * y1);
+  }
+  return area / 2;
+}
+
+async function mapWithConcurrency(items, concurrency, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(items.length, Math.max(1, Number(concurrency) || 1));
+
+  async function runWorker() {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      try {
+        results[index] = { status: "fulfilled", value: await worker(items[index], index) };
+      } catch (error) {
+        results[index] = { status: "rejected", reason: error };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, runWorker));
+  return results;
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
 }
 
 function resolveParkNameField(layer) {
