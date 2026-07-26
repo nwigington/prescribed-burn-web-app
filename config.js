@@ -28,10 +28,10 @@ window.APP_CONFIG = {
     // "auto" uses OAuth when oauthAppId is populated; otherwise it uses the
     // API key above. Use "oauth" for an authorized-user production app.
     mode: "oauth",
-    oauthAppId: "",
+    oauthAppId: "Im5Ghf9kpTRxXjZb",
     oauthPortalUrl: "https://www.arcgis.com",
     requireSignIn: true,
-    popup: false,
+    popup: true,
     // Optional but recommended. Enter the California State Parks ArcGIS
     // Online organization ID to reject users from other organizations.
     allowedOrganizationId: ""
