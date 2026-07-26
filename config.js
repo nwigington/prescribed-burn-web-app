@@ -31,7 +31,7 @@ window.APP_CONFIG = {
     oauthAppId: "Im5Ghf9kpTRxXjZb",
     oauthPortalUrl: "https://www.arcgis.com",
     requireSignIn: true,
-    popup: true,
+    popup: false,
     // Optional but recommended. Enter the California State Parks ArcGIS
     // Online organization ID to reject users from other organizations.
     allowedOrganizationId: ""
