@@ -17,7 +17,7 @@ window.APP_CONFIG = {
   arcgis: {
     sdkVersion: "5.1",
     portalUrl: "https://www.arcgis.com",
-    apiKey: "AAPTaDs-pyybaNZlyGQNOluv6SA..tlRgdE2Kv47zeH03y9F3eWq3-82FmL-602cMoSZqOuXufLYpoOn2YOobsm9pRQkb1jvDX9qkJpAcHX8tu8rz0d17YhbLfhleT-BwC2UvmZFpCGBGBqiQPtfY2qtKKB1a3Q2vf-nFo1p1nQaqnpCJ1Z6my_cgLHHziGTCegfaVWApcBmqZZX7XXepcMUJ7AFhYYWl_z2bSLjA7WgQ21hSDEEREoSqAp4Y6FMH2ZeeUytpgFomf791U8TXu3SzJIGw0RvXbDRbtVdBpZsJzfPFAT1_NXRHuhAF",
+    apiKey: "",
     webMapItemId: "b3d7d802b86a4d2e9f8f50b9e5c353a0",
     basemap: "hybrid",
     center: [-120.62, 37.72],
@@ -27,7 +27,7 @@ window.APP_CONFIG = {
   authentication: {
     // "auto" uses OAuth when oauthAppId is populated; otherwise it uses the
     // API key above. Use "oauth" for an authorized-user production app.
-    mode: "auto",
+    mode: "oauth",
     oauthAppId: "",
     oauthPortalUrl: "https://www.arcgis.com",
     requireSignIn: true,
