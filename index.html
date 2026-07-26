@@ -81,25 +81,25 @@
             <arcgis-zoom slot="top-left"></arcgis-zoom>
             <arcgis-home slot="top-left"></arcgis-home>
             <arcgis-locate slot="top-left"></arcgis-locate>
-            <arcgis-expand slot="top-right" group="map-tools" expand-tooltip="Choose Basemap">
+            <arcgis-expand slot="top-right" group="map-tools" expand-tooltip="Choose basemap">
               <arcgis-basemap-gallery reference-element="map"></arcgis-basemap-gallery>
             </arcgis-expand>
-            <arcgis-expand slot="top-right" group="map-tools" expand-tooltip="Map Layers">
+            <arcgis-expand slot="top-right" group="map-tools" expand-tooltip="Map layers">
               <arcgis-layer-list reference-element="map"></arcgis-layer-list>
             </arcgis-expand>
-            <arcgis-expand slot="top-right" group="map-tools" expand-tooltip="Map Legend">
+            <arcgis-expand slot="top-right" group="map-tools" expand-tooltip="Map legend">
               <arcgis-legend reference-element="map"></arcgis-legend>
             </arcgis-expand>
             <arcgis-scale-bar slot="bottom-left" unit="dual"></arcgis-scale-bar>
           </arcgis-map>
 
-          <button id="mapToolsToggle" class="map-tools-toggle glass-button is-pressed" type="button" aria-expanded="false" aria-controls="mapToolsDrawer">
-            Map Tools
+          <button id="mapToolsToggle" class="map-tools-toggle glass-button is-pressed" type="button" aria-expanded="true" aria-controls="mapToolsDrawer">
+            Map tools
           </button>
 
-          <aside id="mapToolsDrawer" class="map-tools-drawer" aria-label="Map Tools">
+          <aside id="mapToolsDrawer" class="map-tools-drawer" aria-label="Map tools">
             <div class="drawer-header">
-              <h3>Map Tools</h3>
+              <h3>Map tools</h3>
               <button id="closeMapTools" class="icon-button" type="button" aria-label="Close map tools">×</button>
             </div>
             <div class="drawer-tabs" role="tablist" aria-label="Map tool categories">
