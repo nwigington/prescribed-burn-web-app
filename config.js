@@ -108,14 +108,40 @@ window.APP_CONFIG = {
       "Red Flag Warning",
       "Fire Weather Watch",
       "Extreme Fire Danger",
-      "Fire Warning"
+      "Fire Warning",
+      "Air Quality Alert",
+      "Extreme Heat Warning",
+      "Extreme Heat Watch",
+      "Storm Watch",
+      "High Wind Warning",
+      "High Wind Watch",
+      "Wind Advisory",
+      "Severe Thunderstorm Watch",
+      "Severe Thunderstorm Warning",
+      "Severe Weather Statement",
+      "Storm Warning",
+      "Extreme Wind Warning",
+      "Heat Advisory"
     ],
     // Official weather.gov hazard-map colors (updated March 10, 2025).
     hazardColors: {
       "Red Flag Warning": "#FF1493",
       "Fire Weather Watch": "#FFDEAD",
       "Extreme Fire Danger": "#E9967A",
-      "Fire Warning": "#A0522D"
+      "Fire Warning": "#A0522D",
+      "Air Quality Alert": "#808080",
+      "Extreme Heat Warning": "#c71585",
+      "Extreme Heat Watch": "#800000",
+      "Storm Watch":"#ffe4b5",
+      "High Wind Warning": "#daa520",
+      "High Wind Watch": "#b8860b",
+      "Wind Advisory": "#d2b48c",
+      "Severe Thunderstorm Watch": "#db7093",
+      "Severe Thunderstorm Warning": "#ffa500",
+      "Severe Weather Statement": "#00ffff",
+      "Storm Warning": "#9400d3",
+      "Extreme Wind Warning": "#ff8c00",
+      "Heat Advisory": "#ff7f50"
     }
   },
 
