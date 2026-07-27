@@ -28,7 +28,7 @@ window.APP_CONFIG = {
     // "auto" uses OAuth when oauthAppId is populated; otherwise it uses the
     // API key above. Use "oauth" for an authorized-user production app.
     mode: "oauth",
-    oauthAppId: "lSLvkCzwNXRHuhAF",
+    oauthAppId: "Im5Ghf9kpTRxXjZb",
     oauthPortalUrl: "https://www.arcgis.com",
     requireSignIn: true,
     popup: false,
@@ -82,14 +82,19 @@ window.APP_CONFIG = {
   },
 
   alertImpacts: {
-    // Statewide public park boundaries used only to determine which California
-    // State Park units intersect an NWS alert polygon. This layer is not drawn.
+    // Public statewide park boundaries used only for NWS alert intersection
+    // screening. This analysis layer is queried in the background and is not
+    // added to the web map or Layer List.
     parkBoundaryServiceUrl:
-      "https://services2.arcgis.com/AhxrK3F6WM8ECvDi/arcgis/rest/services/CVD_Park_Boundaries/FeatureServer/0",
+      "https://services2.arcgis.com/AhxrK3F6WM8ECvDi/arcgis/rest/services/ParkBoundaries/FeatureServer/0",
     parkBoundaryLayerId: 0,
     parkNameField: "UNITNAME",
+    definitionExpression: "",
     maxDisplayedParkNames: 12,
-    maxAffectedZonesToFetch: 12
+    maxAffectedZonesToFetch: 50,
+    zoneFetchConcurrency: 6,
+    spatialQueryConcurrency: 3,
+    analysisTimeoutMs: 20000
   },
 
   weather: {

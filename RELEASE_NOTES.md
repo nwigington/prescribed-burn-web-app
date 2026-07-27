@@ -1,3 +1,25 @@
+# Release Notes — Version 3.4
+
+## NWS alert intersection correction
+
+* Replaced the Central Valley District-only analysis source with the public statewide `ParkBoundaries` layer.
+* Corrected GeoJSON polygon ring orientation before ArcGIS spatial queries.
+* Simplifies and projects alert geometries, groups linked NWS zones into query batches, and retries zone geometry when a direct CAP geometry returns no park units.
+* Increased zone coverage, limited network/query concurrency, and added a finite analysis timeout so alert cards cannot remain indefinitely in a checking state.
+* Removed "California State" from the lower-right alert-impact wording.
+
+## Clear map selection
+
+* Added **Clear selection** to the Map Tools Identify tab.
+* Clears the selected burn unit and returns the Identify panel to its default instructions.
+* Removes the selected point-forecast marker and resets the point-forecast panel.
+* Closes and clears ArcGIS popup state when supported by the active map view.
+* Restores normal burn-unit symbology by redrawing the score overlay without a selected unit.
+* Cancels an in-progress NWS request associated with the cleared selection.
+* Leaves unfinished burn-unit sketches and hosted features unchanged.
+* Disables the button when no selection exists and supports Escape when no dialog is open.
+
+
 # Release Notes — Version 3.3
 
 ## Clear map selection
