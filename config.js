@@ -28,7 +28,7 @@ window.APP_CONFIG = {
     // "auto" uses OAuth when oauthAppId is populated; otherwise it uses the
     // API key above. Use "oauth" for an authorized-user production app.
     mode: "oauth",
-    oauthAppId: "Im5Ghf9kpTRxXjZb",
+    oauthAppId: "lSLvkCzwNXRHuhAF",
     oauthPortalUrl: "https://www.arcgis.com",
     requireSignIn: true,
     popup: false,
@@ -99,6 +99,8 @@ window.APP_CONFIG = {
 
   weather: {
     nwsApiRoot: "https://api.weather.gov",
+    alertStateCode: "CA",
+    alertRegionCode: "WR",
     forecastHours: 12,
     requestTimeoutMs: 25000,
     maxAlertsToDisplay: 6,

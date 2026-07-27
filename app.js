@@ -174,6 +174,7 @@ async function initialize() {
   await state.mapElement.viewOnReady();
   state.view = state.mapElement.view;
   configureMapAccessibility();
+  configureMapPopupBehavior();
 
   createOperationalLayers();
   await resolveParkLayer();
@@ -408,6 +409,25 @@ function configureMapAccessibility() {
     label: "Prescribed fire planning and operations map",
     description: "Map showing prescribed burn units, conceptual smoke-screening polygons, and sensitive areas. Use the Burn list for a text alternative."
   };
+}
+
+function configureMapPopupBehavior() {
+  // This application presents selected-feature details in the accessible Map
+  // Tools drawer. Disable the ArcGIS default popup so it cannot cover the
+  // drawer, map controls, or operational side panel.
+  state.mapElement.popupDisabled = true;
+  if (!state.view) return;
+  state.view.popupEnabled = false;
+  try {
+    state.view.closePopup();
+  } catch (error) {
+    console.debug("The ArcGIS popup was not open during initialization.", error);
+  }
+  try {
+    state.view.popup = null;
+  } catch (error) {
+    console.debug("The ArcGIS popup instance could not be cleared.", error);
+  }
 }
 
 function createOperationalLayers() {
@@ -3123,40 +3143,150 @@ async function loadFireWeatherAlerts() {
   dom.alertStatus.textContent = "Checking…";
   dom.weatherAlerts.replaceChildren();
   try {
-    const url = `${CONFIG.weather.nwsApiRoot}/alerts/active?area=CA`;
-    const data = await fetchJson(url);
-    const configuredEvents = new Set(CONFIG.weather.fireWeatherEvents.map(normalize));
-    const alerts = (data.features || []).filter((feature) => {
-      const event = normalize(feature.properties?.event);
-      return configuredEvents.has(event) || event.includes("fire weather") || event.includes("red flag");
-    });
-    dom.alertStatus.textContent = alerts.length ? `${alerts.length} active` : "None active";
+    const alerts = await fetchCaliforniaFireWeatherAlerts();
     if (!alerts.length) {
+      dom.alertStatus.textContent = "None active";
       const message = document.createElement("p");
       message.className = "empty-message";
-      message.textContent = "No active California NWS fire-weather alerts were returned.";
+      message.textContent = "No active NWS fire-weather alerts affecting California were returned.";
       dom.weatherAlerts.append(message);
       return;
     }
 
     const maxAlerts = Math.max(1, Number(CONFIG.weather.maxAlertsToDisplay) || 6);
-    for (const alert of alerts.slice(0, maxAlerts)) {
+    const displayedAlerts = alerts.slice(0, maxAlerts);
+    const impactTasks = [];
+    for (const alert of displayedAlerts) {
       const card = buildAlertCard(alert);
       dom.weatherAlerts.append(card);
-      updateAlertParkImpacts(alert, card).catch((error) => {
-        console.warn("Park-unit alert-impact screening did not complete.", error);
-        const impact = card.querySelector("[data-alert-park-impact]");
-        if (impact) impact.textContent = "Park-unit overlap could not be determined.";
-      });
+      impactTasks.push(
+        updateAlertParkImpacts(alert, card).catch((error) => {
+          console.warn("Park-unit alert-impact screening did not complete.", error);
+          const impact = card.querySelector("[data-alert-park-impact]");
+          if (impact) impact.textContent = "Park-unit overlap could not be determined.";
+          return { status: "unavailable", names: [] };
+        })
+      );
     }
+
+    // Do not report the alert section as fully loaded while the park-impact
+    // labels are still spinning. Each analysis has its own finite timeout.
+    await Promise.allSettled(impactTasks);
+    dom.alertStatus.textContent = `${displayedAlerts.length} active${alerts.length > displayedAlerts.length ? ` of ${alerts.length}` : ""}`;
   } catch (error) {
-    console.error(error);
+    console.error("NWS fire-weather alerts could not be loaded.", error);
     dom.alertStatus.textContent = "Unavailable";
     const message = document.createElement("p");
     message.className = "empty-message";
     message.textContent = "Fire-weather alerts could not be retrieved from the National Weather Service.";
     dom.weatherAlerts.append(message);
   }
+}
+
+async function fetchCaliforniaFireWeatherAlerts() {
+  const root = String(CONFIG.weather.nwsApiRoot || "https://api.weather.gov").replace(/\/$/, "");
+  const stateCode = String(CONFIG.weather.alertStateCode || "CA").trim().toUpperCase();
+  const regionCode = String(CONFIG.weather.alertRegionCode || "WR").trim().toUpperCase();
+  const stateEndpoints = [
+    `${root}/alerts/active/area/${encodeURIComponent(stateCode)}`,
+    `${root}/alerts/active?area=${encodeURIComponent(stateCode)}`
+  ];
+
+  let stateFeatures = [];
+  let successfulStateRequest = false;
+  let lastStateError = null;
+  for (const endpoint of stateEndpoints) {
+    try {
+      const data = await fetchJson(endpoint);
+      successfulStateRequest = true;
+      stateFeatures = Array.isArray(data?.features) ? data.features : [];
+      // A non-empty response is authoritative. When the path endpoint returns
+      // an unexpected empty collection, retry the documented query form.
+      if (stateFeatures.length) break;
+    } catch (error) {
+      lastStateError = error;
+      console.warn(`NWS state-alert request failed: ${endpoint}`, error);
+    }
+  }
+
+  // Some multi-state fire-weather products are issued by western offices and
+  // may not be consistently returned by every state endpoint. Merge western
+  // region alerts that explicitly contain California UGC/SAME metadata.
+  let regionalFeatures = [];
+  let regionalRequestSucceeded = false;
+  if (regionCode) {
+    try {
+      const regionalData = await fetchJson(`${root}/alerts/active/region/${encodeURIComponent(regionCode)}`);
+      regionalRequestSucceeded = true;
+      regionalFeatures = (regionalData?.features || []).filter((feature) =>
+        isCaliforniaAlertByMetadata(feature, stateCode)
+      );
+    } catch (error) {
+      console.warn("The NWS western-region alert fallback was unavailable.", error);
+    }
+  }
+
+  if (!successfulStateRequest && !regionalRequestSucceeded) {
+    throw lastStateError || new Error("No NWS alert endpoint completed successfully.");
+  }
+
+  const configuredEvents = new Set((CONFIG.weather.fireWeatherEvents || []).map(normalize));
+  const merged = deduplicateAlertFeatures([...stateFeatures, ...regionalFeatures]);
+  const alerts = merged
+    .filter((feature) => isConfiguredFireWeatherAlert(feature, configuredEvents))
+    .sort(compareAlertFeatures);
+
+  console.info("NWS fire-weather alert diagnostics", {
+    stateCode,
+    stateFeatures: stateFeatures.length,
+    regionalCaliforniaFeatures: regionalFeatures.length,
+    fireWeatherAlerts: alerts.length
+  });
+  return alerts;
+}
+
+function isConfiguredFireWeatherAlert(feature, configuredEvents) {
+  const event = normalize(feature?.properties?.event);
+  return configuredEvents.has(event) || event.includes("fire weather") || event.includes("red flag");
+}
+
+function isCaliforniaAlertByMetadata(feature, stateCode = "CA") {
+  const properties = feature?.properties || {};
+  const geocode = properties.geocode || {};
+  const ugcValues = toStringArray(geocode.UGC || geocode.ugc);
+  if (ugcValues.some((value) => value.toUpperCase().startsWith(stateCode))) return true;
+
+  const sameValues = toStringArray(geocode.SAME || geocode.same);
+  // California's state FIPS code is 06; SAME values are commonly six digits.
+  if (stateCode === "CA" && sameValues.some((value) => /^006/.test(value.replace(/\D/g, "")))) return true;
+
+  const areaDescription = normalize(properties.areaDesc);
+  return areaDescription.includes("california");
+}
+
+function toStringArray(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  if (value == null || value === "") return [];
+  return String(value).split(/[;,\s]+/).map((item) => item.trim()).filter(Boolean);
+}
+
+function deduplicateAlertFeatures(features) {
+  const unique = new Map();
+  for (const feature of features || []) {
+    const properties = feature?.properties || {};
+    const key = safeText(
+      feature?.id || properties["@id"] || properties.id,
+      `${properties.event || "alert"}|${properties.sent || properties.effective || ""}|${properties.areaDesc || ""}`
+    );
+    if (!unique.has(key)) unique.set(key, feature);
+  }
+  return [...unique.values()];
+}
+
+function compareAlertFeatures(first, second) {
+  const firstTime = toDate(first?.properties?.sent || first?.properties?.effective)?.getTime() || 0;
+  const secondTime = toDate(second?.properties?.sent || second?.properties?.effective)?.getTime() || 0;
+  return secondTime - firstTime;
 }
 
 function buildAlertCard(feature) {
@@ -3221,12 +3351,12 @@ async function updateAlertParkImpacts(feature, card) {
 
   if (result.status === "unavailable") {
     impactElement.textContent = "Park-unit overlap unavailable for this alert.";
-    return;
+    return result;
   }
 
   if (!result.names.length) {
     impactElement.textContent = "No park units intersect this alert.";
-    return;
+    return result;
   }
 
   const maxNames = Math.max(1, Number(CONFIG.alertImpacts?.maxDisplayedParkNames) || 12);
@@ -3235,6 +3365,7 @@ async function updateAlertParkImpacts(feature, card) {
   const noun = result.names.length === 1 ? "unit" : "units";
   impactElement.textContent = `${result.names.length} park ${noun} affected: ${shown.join("; ")}${remainder > 0 ? `; and ${remainder} more` : ""}`;
   impactElement.title = result.names.join("; ");
+  return result;
 }
 
 async function findAffectedParkUnits(feature) {
@@ -3372,6 +3503,11 @@ function spatialReferencesMatch(first, second) {
 function getSpatialReferenceWkid(spatialReference) {
   return Number(spatialReference?.latestWkid || spatialReference?.wkid || 0);
 }
+
+async function queryParkNamesByGeometry(layer, nameField, geometry) {
+  const query = layer.createQuery();
+  query.where = "1=1";
+  query.geometry = geometry;
   query.spatialRelationship = "intersects";
   query.returnGeometry = false;
   query.outFields = [nameField];
@@ -3498,6 +3634,7 @@ function withTimeout(promise, timeoutMs, message) {
   });
   return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
 }
+
 function resolveParkNameField(layer) {
   const configured = CONFIG.alertImpacts?.parkNameField || CONFIG.parkBoundaries?.nameField;
   if (configured && layer.fields?.some((field) => field.name === configured)) return configured;

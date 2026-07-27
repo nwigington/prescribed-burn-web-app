@@ -74,3 +74,9 @@ Test the final configured application with:
 ## Clear selection control
 
 The Map Tools Identify tab includes a keyboard-operable **Clear selection** button with a 44-pixel minimum target. It is disabled when no map selection is active, announces completion through the application live region, and has an Escape-key equivalent when no modal dialog is open. Clearing a selection does not delete a hosted feature or discard an unfinished sketch.
+## Version 3.5 interface behavior
+
+* The Map Tools drawer is collapsed at startup, with the toggle exposing `aria-expanded="false"` until opened.
+* The default ArcGIS popup is disabled to prevent overlapping interactive controls and duplicate feature-detail presentations. Selected burn-unit information remains available in the keyboard-operable Identify panel and Burn List.
+* Dashboard statistical-card labels and values are centered without changing reading order or semantic markup.
+

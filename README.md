@@ -1,13 +1,33 @@
-# California State Parks Prescribed Fire Operations Hub — Version 3.4
+# California State Parks Prescribed Fire Operations Hub — Version 3.5
 
-This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.4 builds on the Version 3.3 map-selection workflow, keeps `RxBurns\_Poly` as the authoritative burn-unit source and edit target, and corrects statewide NWS alert-to-park intersection screening.
+This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.5 uses the user-modified Version 3.4 package as its authoritative base. It preserves the configured ArcGIS Online OAuth workflow and `RxBurns\_Poly` integration while applying only the requested popup, alert, statistic-card, and initial Map Tools state corrections.
+
+## Run locally
+
+Serve the folder through HTTP rather than opening `index.html` with a `file:///` address.
+
+```powershell
+cd "C:\\path\\to\\CVD\_Prescribed\_Fire\_GIS\_Hub\_v3\_5"
+python -m http.server 8000
+```
+
+Open `http://localhost:8000`.
+
+## Version 3.5 changes
+
+* Disables the ArcGIS default popup at both the map-component and MapView levels so selected-feature information is presented only in the Map Tools drawer.
+* Starts the application with the Map Tools drawer minimized while retaining the existing Map Tools button.
+* Centers both labels and values in all four dashboard statistic cards.
+* Strengthens NWS alert retrieval with the documented state path endpoint, query-form fallback, and a Western Region metadata fallback for multi-state California products.
+* Waits for each displayed alert's park-unit intersection analysis to finish or time out before marking the alert section fully loaded.
+* Preserves the shorter lower-right wording, such as “3 park units affected,” without “California State.”
 
 ## Version 3.4 changes
 
 * Corrected NWS alert-to-park intersection screening to use the public statewide `ParkBoundaries` layer instead of the Central Valley District-only map layer.
 * Normalizes GeoJSON ring orientation, simplifies alert polygons, projects WGS 84 geometries to Web Mercator when required, and groups zone polygons into reliable spatial-query batches.
 * Increased affected-zone coverage, limited request concurrency, and added a 20-second analysis timeout so alert cards cannot remain indefinitely in a checking state.
-* Shortened lower-right alert language to "park unit" and removed "California State" from the analysis text.
+* Shortened lower-right alert language to “park unit” and removed “California State” from the analysis text.
 
 ## Version 3.3 changes
 
@@ -46,6 +66,33 @@ The application first searches the configured web map for `RxBurns\_Poly` by exa
 * add/update operations.
 
 The application draws a separate forecast-score overlay so burn units can be symbolized by high, medium, low, or unknown burn score. That overlay and other temporary graphics are hidden from the ArcGIS Layer List. The authoritative `RxBurns\_Poly` layer remains represented in the Layer List.
+
+## ArcGIS configuration
+
+Edit `config.js`.
+
+```javascript
+arcgis: {
+  portalUrl: "https://www.arcgis.com",
+  webMapItemId: "YOUR\_WEB\_MAP\_ITEM\_ID"
+},
+
+authentication: {
+  mode: "oauth",
+  oauthAppId: "YOUR\_REGISTERED\_APP\_ID",
+  oauthPortalUrl: "https://www.arcgis.com",
+  requireSignIn: true,
+  popup: false,
+  allowedOrganizationId: "YOUR\_STATE\_PARKS\_ORG\_ID"
+},
+
+prescribedBurns: {
+  serviceUrl: "https://services2.arcgis.com/.../FeatureServer/0",
+  webMapLayerTitle: "RxBurns\_Poly",
+  layerId: 0,
+  allowFeatureServiceEdits: true,
+  requireOAuthForEdits: true
+}
 ```
 
 The field mapping under `prescribedBurns.fields` is treated as a preferred mapping. After the layer loads, the application reconciles those names against actual REST field names and aliases, then builds the form and filters from the layer's domains.
@@ -86,3 +133,4 @@ For production, use related tables keyed by GlobalID/GUID, editor tracking, auth
 * `ACCESSIBILITY.md` — accessibility implementation and tests
 * `FEATURE\_MATRIX.md` — feature status and production dependencies
 * `RELEASE\_NOTES.md` — version-specific corrections
+
