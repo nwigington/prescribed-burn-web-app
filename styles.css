@@ -625,3 +625,15 @@ tbody tr:hover { background: rgba(244,201,93,0.055); }
   .nav-button, .glass-button, .primary-button, .secondary-button, .danger-button, .resource-card, .content-section, .kpi-card, .map-tools-drawer, .app-dialog, .section-collapse-button, .alert-card, .priority-card { forced-color-adjust: auto; border: 1px solid ButtonText; }
   .legend-symbol, .forecast-chip { border: 2px solid CanvasText; }
 }
+
+/* Center the NWS Spot Forecast button in the current-weather panel */
+#panel-planner #spotForecastPlannerLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.7rem 1rem;
+  text-align: center;
+  line-height: 1.25;
+  white-space: normal;
+}
