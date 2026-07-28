@@ -103,7 +103,118 @@ const state = {
   sourceCanEdit: false
 };
 
-const dom = {};
+const dom = {
+  const workspace = document.querySelector(".workspace");
+  const operationsPanel = document.getElementById("operations-panel");
+  const operationsPanelToggle =
+    document.getElementById("operationsPanelToggle");
+  const operationsPanelArrow =
+    document.getElementById("operationsPanelArrow");
+  const operationsPanelToggleText =
+    document.getElementById("operationsPanelToggleText");
+};
+
+/**
+ * Expands or collapses the desktop operations panel.
+ *
+ * @param {boolean} collapsed
+ */
+function setOperationsPanelCollapsed(collapsed) {
+  if (
+    !workspace ||
+    !operationsPanel ||
+    !operationsPanelToggle ||
+    !operationsPanelArrow ||
+    !operationsPanelToggleText
+  ) {
+    return;
+  }
+
+  workspace.classList.toggle(
+    "is-operations-collapsed",
+    collapsed
+  );
+
+  operationsPanelToggle.setAttribute(
+    "aria-expanded",
+    String(!collapsed)
+  );
+
+  operationsPanel.setAttribute(
+    "aria-hidden",
+    String(collapsed)
+  );
+
+  /*
+   * Expanded: arrow points right because the panel
+   * will collapse toward the right.
+   *
+   * Collapsed: arrow points left because the panel
+   * will expand toward the map.
+   */
+  operationsPanelArrow.textContent = collapsed ? "‹" : "›";
+
+  const actionText = collapsed
+    ? "Expand operations panel"
+    : "Collapse operations panel";
+
+  operationsPanelToggleText.textContent = actionText;
+  operationsPanelToggle.title = actionText;
+
+  /*
+   * Allow the grid transition to finish, then tell the
+   * ArcGIS MapView to recalculate its dimensions.
+   */
+  window.setTimeout(() => {
+    const mapElement = document.getElementById("map");
+    const mapView = mapElement?.view;
+
+    if (mapView && typeof mapView.resize === "function") {
+      mapView.resize();
+    }
+  }, 260);
+}
+
+const OPERATIONS_PANEL_STORAGE_KEY =
+  "cvd-prescribed-fire-operations-panel-collapsed";
+
+operationsPanelToggle?.addEventListener("click", () => {
+  const isCurrentlyCollapsed =
+    workspace?.classList.contains(
+      "is-operations-collapsed"
+    ) ?? false;
+
+  const newCollapsedState = !isCurrentlyCollapsed;
+
+  setOperationsPanelCollapsed(newCollapsedState);
+
+  try {
+    localStorage.setItem(
+      OPERATIONS_PANEL_STORAGE_KEY,
+      String(newCollapsedState)
+    );
+  } catch (error) {
+    console.warn(
+      "Operations panel preference could not be saved.",
+      error
+    );
+  }
+});
+
+let savedOperationsPanelState = false;
+
+try {
+  savedOperationsPanelState =
+    localStorage.getItem(OPERATIONS_PANEL_STORAGE_KEY) ===
+    "true";
+} catch (error) {
+  console.warn(
+    "Operations panel preference could not be read.",
+    error
+  );
+}
+
+setOperationsPanelCollapsed(savedOperationsPanelState);
 
 initialize().catch((error) => {
   console.error(error);
