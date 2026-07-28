@@ -27,7 +27,7 @@ window.APP_CONFIG = {
   authentication: {
     // "auto" uses OAuth when oauthAppId is populated; otherwise it uses the
     // API key above. Use "oauth" for an authorized-user production app.
-    mode: "auto",
+    mode: "oauth",
     oauthAppId: "lSLvkCzwNXRHuhAF",
     oauthPortalUrl: "https://csparks.maps.arcgis.com",
     requireSignIn: true,
@@ -37,7 +37,7 @@ window.APP_CONFIG = {
     // while Microsoft Entra ID handles the user credential verification.
     // Optional but recommended: enter the California State Parks ArcGIS
     // Online organization ID to reject users from other organizations.
-    allowedOrganizationId: ""
+    allowedOrganizationId: "26087"
   },
 
   prescribedBurns: {
