@@ -103,16 +103,10 @@ const state = {
   sourceCanEdit: false
 };
 
-const dom = {
-  const workspace = document.querySelector(".workspace");
-  const operationsPanel = document.getElementById("operations-panel");
-  const operationsPanelToggle =
-    document.getElementById("operationsPanelToggle");
-  const operationsPanelArrow =
-    document.getElementById("operationsPanelArrow");
-  const operationsPanelToggleText =
-    document.getElementById("operationsPanelToggleText");
-};
+const dom = {};
+
+const OPERATIONS_PANEL_STORAGE_KEY =
+  "cvd-prescribed-fire-operations-panel-collapsed";
 
 /**
  * Expands or collapses the desktop operations panel.
@@ -121,100 +115,83 @@ const dom = {
  */
 function setOperationsPanelCollapsed(collapsed) {
   if (
-    !workspace ||
-    !operationsPanel ||
-    !operationsPanelToggle ||
-    !operationsPanelArrow ||
-    !operationsPanelToggleText
+    !dom.workspace ||
+    !dom.operationsPanel ||
+    !dom.operationsPanelToggle ||
+    !dom.operationsPanelArrow ||
+    !dom.operationsPanelToggleText
   ) {
     return;
   }
 
-  workspace.classList.toggle(
+  dom.workspace.classList.toggle(
     "is-operations-collapsed",
     collapsed
   );
 
-  operationsPanelToggle.setAttribute(
+  dom.operationsPanelToggle.setAttribute(
     "aria-expanded",
     String(!collapsed)
   );
 
-  operationsPanel.setAttribute(
+  dom.operationsPanel.setAttribute(
     "aria-hidden",
     String(collapsed)
   );
 
-  /*
-   * Expanded: arrow points right because the panel
-   * will collapse toward the right.
-   *
-   * Collapsed: arrow points left because the panel
-   * will expand toward the map.
-   */
-  operationsPanelArrow.textContent = collapsed ? "‹" : "›";
+  dom.operationsPanelArrow.textContent = collapsed ? "‹" : "›";
 
   const actionText = collapsed
     ? "Expand operations panel"
     : "Collapse operations panel";
 
-  operationsPanelToggleText.textContent = actionText;
-  operationsPanelToggle.title = actionText;
+  dom.operationsPanelToggleText.textContent = actionText;
+  dom.operationsPanelToggle.title = actionText;
 
-  /*
-   * Allow the grid transition to finish, then tell the
-   * ArcGIS MapView to recalculate its dimensions.
-   */
   window.setTimeout(() => {
-    const mapElement = document.getElementById("map");
-    const mapView = mapElement?.view;
-
+    const mapView = state.view || state.mapElement?.view;
     if (mapView && typeof mapView.resize === "function") {
       mapView.resize();
     }
-  }, 260);
+  }, state.reducedMotion ? 0 : 260);
 }
 
-const OPERATIONS_PANEL_STORAGE_KEY =
-  "cvd-prescribed-fire-operations-panel-collapsed";
+function initializeOperationsPanelToggle() {
+  if (!dom.operationsPanelToggle || !dom.workspace) return;
 
-operationsPanelToggle?.addEventListener("click", () => {
-  const isCurrentlyCollapsed =
-    workspace?.classList.contains(
-      "is-operations-collapsed"
-    ) ?? false;
+  dom.operationsPanelToggle.addEventListener("click", () => {
+    const isCurrentlyCollapsed =
+      dom.workspace.classList.contains("is-operations-collapsed");
+    const newCollapsedState = !isCurrentlyCollapsed;
 
-  const newCollapsedState = !isCurrentlyCollapsed;
+    setOperationsPanelCollapsed(newCollapsedState);
 
-  setOperationsPanelCollapsed(newCollapsedState);
+    try {
+      localStorage.setItem(
+        OPERATIONS_PANEL_STORAGE_KEY,
+        String(newCollapsedState)
+      );
+    } catch (error) {
+      console.warn(
+        "Operations panel preference could not be saved.",
+        error
+      );
+    }
+  });
 
+  let savedOperationsPanelState = false;
   try {
-    localStorage.setItem(
-      OPERATIONS_PANEL_STORAGE_KEY,
-      String(newCollapsedState)
-    );
+    savedOperationsPanelState =
+      localStorage.getItem(OPERATIONS_PANEL_STORAGE_KEY) === "true";
   } catch (error) {
     console.warn(
-      "Operations panel preference could not be saved.",
+      "Operations panel preference could not be read.",
       error
     );
   }
-});
 
-let savedOperationsPanelState = false;
-
-try {
-  savedOperationsPanelState =
-    localStorage.getItem(OPERATIONS_PANEL_STORAGE_KEY) ===
-    "true";
-} catch (error) {
-  console.warn(
-    "Operations panel preference could not be read.",
-    error
-  );
+  setOperationsPanelCollapsed(savedOperationsPanelState);
 }
-
-setOperationsPanelCollapsed(savedOperationsPanelState);
 
 initialize().catch((error) => {
   console.error(error);
@@ -225,6 +202,7 @@ initialize().catch((error) => {
 
 async function initialize() {
   cacheDom();
+  initializeOperationsPanelToggle();
   applyBrandingAndLinks();
   buildConditionForms();
   populateDirectionOptions();
@@ -307,7 +285,7 @@ async function initialize() {
 function cacheDom() {
   const ids = [
     "app", "appTitle", "appSubtitle", "brandLogo", "refreshButton", "lastUpdated", "accountButton",
-    "map", "operations-panel", "demoBanner", "dataModeBadge",
+    "map", "operations-panel", "operationsPanelToggle", "operationsPanelArrow", "operationsPanelToggleText", "demoBanner", "dataModeBadge",
     "mapToolsToggle", "mapToolsDrawer", "closeMapTools",
     "identifyEmpty", "identifyContent", "identifyName", "identifyScore", "identifyDetails",
     "identifyConditions", "manageSelectedUnit", "updateSelectedForecast", "clearMapSelectionButton", "drawSquareButton",
@@ -340,6 +318,8 @@ function cacheDom() {
   ];
 
   for (const id of ids) dom[id] = document.getElementById(id);
+  dom.workspace = document.querySelector(".workspace");
+  dom.operationsPanel = dom["operations-panel"];
   state.mapElement = dom.map;
 }
 
@@ -408,7 +388,9 @@ async function initializeAuthentication() {
   const info = new state.modules.OAuthInfo({
     appId: auth.oauthAppId.trim(),
     portalUrl,
-    popup: Boolean(auth.popup)
+    popup: Boolean(auth.popup),
+    preserveUrlHash: !Boolean(auth.popup),
+    flowType: "auto"
   });
   state.oauthInfo = info;
   state.modules.identityManager.registerOAuthInfos([info]);
