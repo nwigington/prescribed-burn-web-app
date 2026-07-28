@@ -637,3 +637,143 @@ tbody tr:hover { background: rgba(244,201,93,0.055); }
   line-height: 1.25;
   white-space: normal;
 }
+
+@media (min-width: 901px) {
+  .workspace {
+    /*
+     * Approximately two-thirds of a previous 42rem panel.
+     * Change this one value to fine-tune the panel width.
+     */
+    --operations-panel-width: 28rem;
+    --operations-toggle-size: 2.5rem;
+
+    position: relative;
+    grid-template-columns:
+      minmax(0, 1fr)
+      var(--operations-panel-width);
+
+    transition: grid-template-columns 240ms ease;
+  }
+
+  .operations-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+
+    opacity: 1;
+    visibility: visible;
+
+    transition:
+      opacity 160ms ease,
+      visibility 160ms ease;
+  }
+
+  /* Arrow button between the map and operations panel */
+  .operations-panel-toggle {
+    position: absolute;
+    z-index: 40;
+    top: 50%;
+
+    /*
+     * Places the center of the button over the left edge
+     * of the operations panel.
+     */
+    right: calc(
+      var(--operations-panel-width) -
+      (var(--operations-toggle-size) / 2)
+    );
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: var(--operations-toggle-size);
+    height: 4.5rem;
+    padding: 0;
+
+    color: #ffffff;
+    background:
+      linear-gradient(
+        180deg,
+        rgba(24, 42, 49, 0.98),
+        rgba(12, 27, 34, 0.98)
+      );
+
+    border: 1px solid rgba(242, 201, 76, 0.75);
+    border-radius: 0.65rem 0 0 0.65rem;
+    box-shadow:
+      -4px 0 14px rgba(0, 0, 0, 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+    font-family: inherit;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+
+    cursor: pointer;
+    transform: translateY(-50%);
+
+    transition:
+      right 240ms ease,
+      background-color 160ms ease,
+      border-color 160ms ease,
+      transform 160ms ease;
+  }
+
+  .operations-panel-toggle:hover {
+    background:
+      linear-gradient(
+        180deg,
+        rgba(48, 67, 73, 0.99),
+        rgba(20, 38, 45, 0.99)
+      );
+
+    border-color: #f2c94c;
+  }
+
+  .operations-panel-toggle:focus-visible {
+    outline: 3px solid #ffe680;
+    outline-offset: 3px;
+  }
+
+  .operations-panel-toggle:active {
+    transform: translateY(-50%) scale(0.96);
+  }
+
+  /* Collapsed layout */
+  .workspace.is-operations-collapsed {
+    grid-template-columns: minmax(0, 1fr) 0;
+  }
+
+  .workspace.is-operations-collapsed .operations-panel {
+    min-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .workspace.is-operations-collapsed .operations-panel-toggle {
+    right: 0.5rem;
+    border-radius: 0.65rem;
+  }
+}
+
+/*
+ * Keep the existing mobile/tablet layout.
+ * The side-arrow control is hidden when the operations panel
+ * is no longer displayed as a desktop sidebar.
+ */
+@media (max-width: 900px) {
+  .operations-panel-toggle {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace,
+  .operations-panel,
+  .operations-panel-toggle {
+    transition: none;
+  }
+}
