@@ -387,9 +387,9 @@ async function initializeAuthentication() {
   const portalUrl = String(auth.oauthPortalUrl || CONFIG.arcgis.portalUrl || "https://www.arcgis.com").replace(/\/$/, "");
   const info = new state.modules.OAuthInfo({
     appId: auth.oauthAppId.trim(),
-    portalUrl,
-    popup: Boolean(auth.popup),
-    preserveUrlHash: !Boolean(auth.popup),
+    portalUrl: "https://www.arcgis.com",
+    popup: false,
+    preserveUrlHash: false,
     flowType: "auto"
   });
   state.oauthInfo = info;
