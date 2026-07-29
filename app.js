@@ -377,35 +377,61 @@ function hasOAuthConfiguration() {
 
 async function initializeAuthentication() {
   const auth = getAuthenticationConfig();
-  state.authMode = hasOAuthConfiguration() ? "oauth" : "apiKey";
+  state.authMode = hasOAuthConfiguration()
+    ? "oauth"
+    : "apiKey";
 
   if (state.authMode !== "oauth") {
     updateAccountUi();
     return;
   }
 
-  const portalUrl = String(auth.oauthPortalUrl || CONFIG.arcgis.portalUrl || "https://www.arcgis.com").replace(/\/$/, "");
+  const portalUrl = String(
+    auth.oauthPortalUrl ||
+    CONFIG.arcgis.portalUrl ||
+    "https://www.arcgis.com"
+  ).replace(/\/$/, "");
+
+  const sharingUrl = `${portalUrl}/sharing/rest`;
+
   const info = new state.modules.OAuthInfo({
     appId: auth.oauthAppId.trim(),
     portalUrl,
-    popup: Boolean(auth.popup),
-    preserveUrlHash: !Boolean(auth.popup),
-    flowType: "auto"
+    popup: false,
+
+    // The application does not use URL-hash routing.
+    preserveUrlHash: false,
+
+    // Explicitly use the recommended PKCE authorization-code flow.
+    flowType: "authorization-code"
   });
+
   state.oauthInfo = info;
+
   state.modules.identityManager.registerOAuthInfos([info]);
 
   try {
-    const sharingUrl = `${portalUrl}/sharing`;
     if (auth.requireSignIn !== false) {
-      state.credential = await state.modules.identityManager.getCredential(sharingUrl);
+      state.credential =
+        await state.modules.identityManager.getCredential(
+          sharingUrl
+        );
     } else {
-      state.credential = await state.modules.identityManager.checkSignInStatus(sharingUrl).catch(() => null);
+      state.credential =
+        await state.modules.identityManager
+          .checkSignInStatus(sharingUrl)
+          .catch(() => null);
     }
 
-    if (state.credential) await loadSignedInPortal(portalUrl);
+    if (state.credential) {
+      await loadSignedInPortal(portalUrl);
+    }
   } catch (error) {
-    console.warn("ArcGIS user authentication was not completed.", error);
+    console.error(
+      "ArcGIS OAuth authentication failed.",
+      error
+    );
+
     updateAccountUi(error);
   }
 }
@@ -431,15 +457,31 @@ async function loadSignedInPortal(portalUrl) {
 
 async function signInUser() {
   if (!hasOAuthConfiguration()) {
-    dom.accountStatus.textContent = "OAuth is not configured";
-    dom.accountUser.textContent = "Enter an ArcGIS OAuth application ID in config.js, then reload the application.";
+    dom.accountStatus.textContent =
+      "OAuth is not configured";
+
+    dom.accountUser.textContent =
+      "Enter an ArcGIS OAuth application ID in config.js.";
+
     return;
   }
 
   try {
-    const portalUrl = String(getAuthenticationConfig().oauthPortalUrl || CONFIG.arcgis.portalUrl).replace(/\/$/, "");
-    state.credential = await state.modules.identityManager.getCredential(`${portalUrl}/sharing`);
+    const portalUrl = String(
+      getAuthenticationConfig().oauthPortalUrl ||
+      CONFIG.arcgis.portalUrl ||
+      "https://www.arcgis.com"
+    ).replace(/\/$/, "");
+
+    const sharingUrl = `${portalUrl}/sharing/rest`;
+
+    state.credential =
+      await state.modules.identityManager.getCredential(
+        sharingUrl
+      );
+
     await loadSignedInPortal(portalUrl);
+
     dom.accountDialog.close();
     window.location.reload();
   } catch (error) {
