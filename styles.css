@@ -645,7 +645,7 @@ tbody tr:hover { background: rgba(244,201,93,0.055); }
      * Change this one value to fine-tune the panel width.
      */
     --operations-panel-width: clamp(24rem, 28vw, 30rem);
-    --operations-toggle-size: 2.5rem;
+    --operations-toggle-size: 2rem;
 
     position: relative;
     grid-template-columns:
