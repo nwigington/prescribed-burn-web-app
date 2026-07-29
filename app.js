@@ -384,12 +384,12 @@ async function initializeAuthentication() {
     return;
   }
 
-  const portalUrl = String(auth.oauthPortalUrl || CONFIG.arcgis.portalUrl || "https://csparks.maps.arcgis.com").replace(/\/$/, "");
+  const portalUrl = String(auth.oauthPortalUrl || CONFIG.arcgis.portalUrl || "https://www.arcgis.com").replace(/\/$/, "");
   const info = new state.modules.OAuthInfo({
     appId: auth.oauthAppId.trim(),
     portalUrl,
-    popup: false,
-    preserveUrlHash: false,
+    popup: Boolean(auth.popup),
+    preserveUrlHash: !Boolean(auth.popup),
     flowType: "auto"
   });
   state.oauthInfo = info;
