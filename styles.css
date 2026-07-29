@@ -680,7 +680,7 @@ tbody tr:hover { background: rgba(244,201,93,0.055); }
      */
     right: calc(
       var(--operations-panel-width) -
-      (var(--operations-toggle-size) / 3)
+      (var(--operations-toggle-size) / 2)
     );
 
     display: flex;
