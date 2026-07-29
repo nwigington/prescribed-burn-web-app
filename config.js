@@ -27,9 +27,9 @@ window.APP_CONFIG = {
   authentication: {
     // "auto" uses OAuth when oauthAppId is populated; otherwise it uses the
     // API key above. Use "oauth" for an authorized-user production app.
-    mode: "auto",
+    mode: "oauth",
     oauthAppId: "lSLvkCzwNXRHuhAF",
-    oauthPortalUrl: "https://csparks.maps.arcgis.com",
+    oauthPortalUrl: "https://www.arcgis.com",
     requireSignIn: true,
     popup: false,
     // The organization URL presents the California State Parks Microsoft 365
@@ -103,7 +103,7 @@ window.APP_CONFIG = {
   weather: {
     nwsApiRoot: "https://api.weather.gov",
     alertStateCode: "CA",
-    alertRegionCode: "WR",
+    alertRegionCode: "",
     forecastHours: 12,
     requestTimeoutMs: 25000,
     maxAlertsToDisplay: 6,
