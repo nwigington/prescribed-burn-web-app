@@ -41,7 +41,7 @@ window.APP_CONFIG = {
   },
 
   prescribedBurns: {
-    serviceUrl: "https://services2.arcgis.com/AhxrK3F6WM8ECvDi/arcgis/rest/services/RxBurns_Poly/FeatureServer/0",
+    serviceUrl: "https://services2.arcgis.com/AhxrK3F6WM8ECvDi/arcgis/rest/services/CVD_PrescribedFire_StagingMap/FeatureServer/0",
     webMapLayerTitle: "RxBurns_Poly",
     // Keep the URL pointed at the actual feature layer (/FeatureServer/0).
     // layerId is retained as a fallback when a service-root URL is supplied.
