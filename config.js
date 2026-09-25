@@ -28,7 +28,7 @@ window.APP_CONFIG = {
     // "auto" uses OAuth when oauthAppId is populated; otherwise it uses the
     // API key above. Use "oauth" for an authorized-user production app.
     mode: "oauth",
-    oauthAppId: "lSLvkCzwNXRHuhAF",
+    oauthAppId: "Ew8W5g0OVnHvjikS",
     oauthPortalUrl: "https://www.arcgis.com",
     requireSignIn: true,
     popup: false,
