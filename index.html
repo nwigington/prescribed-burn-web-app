@@ -180,6 +180,21 @@
           <div class="map-instruction" role="note">Select a burn unit for details, or click an empty map location for a point forecast.</div>
         </section>
 
+        <div
+          id="operationsPanelResizer"
+          class="operations-panel-resizer"
+          role="separator"
+          aria-controls="operations-panel"
+          aria-orientation="vertical"
+          aria-valuemin="320"
+          aria-valuemax="600"
+          aria-valuenow="448"
+          tabindex="0"
+          title="Resize operations panel"
+        >
+          <span class="sr-only">Resize operations panel</span>
+        </div>
+
         <button
   id="operationsPanelToggle"
   class="operations-panel-toggle"
@@ -409,7 +424,7 @@
                 <div class="table-scroll" tabindex="0" aria-label="Scrollable seven-day burn forecast table">
                   <table class="forecast-matrix"><thead id="forecastMatrixHead"></thead><tbody id="forecastMatrixBody"></tbody></table>
                 </div>
-                <div class="resource-links-row resource-links-row--three">
+                <div class="resource-links-row resource-links-row--three weather-resource-actions">
                   <a id="spotForecastUnitLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a>
                   <a id="pointForecastLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Point Forecast</a>
                   <a id="fireWeatherDashboardUnitLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">Fire Weather Dashboard</a>
@@ -434,7 +449,7 @@
               <section class="weather-summary" aria-labelledby="weatherLocation"><div><p id="weatherCoordinates" class="section-kicker"></p><h3 id="weatherLocation">Selected location</h3></div><div class="current-condition"><strong id="weatherTemperature">—</strong><span id="weatherShortForecast">—</span></div></section>
               <dl class="condition-grid"><div><dt>Relative humidity</dt><dd id="weatherHumidity">—</dd></div><div><dt>Wind</dt><dd id="weatherWind">—</dd></div><div><dt>Wind gust</dt><dd id="weatherGust">—</dd></div><div><dt>Precipitation</dt><dd id="weatherPrecip">—</dd></div></dl>
               <section class="content-section"><h3>Next 12 Hours</h3><div class="table-scroll" tabindex="0" aria-label="Scrollable hourly weather forecast table"><table class="forecast-table"><thead><tr><th scope="col">Time</th><th scope="col">Conditions</th><th scope="col">Temp.</th><th scope="col">RH</th><th scope="col">Wind</th><th scope="col">Gust</th></tr></thead><tbody id="hourlyForecastRows"></tbody></table></div></section>
-              <div class="resource-links-row"><a id="spotForecastPlannerLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a><a id="forecastOfficeLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Forecast Office</a></div>
+              <div class="resource-links-row weather-resource-actions"><a id="spotForecastPlannerLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a><a id="forecastOfficeLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Forecast Office</a></div>
               <p class="source-note">Forecasts are planning information and do not replace an approved burn plan, official spot forecast, permit, smoke-management authorization, or field go/no-go determination.</p>
             </div>
           </section>

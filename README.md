@@ -1,6 +1,6 @@
-# California State Parks Prescribed Fire Operations Hub — Version 3.5
+# California State Parks Prescribed Fire Operations Hub — Version 3.7
 
-This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.5 uses the user-modified Version 3.4 package as its authoritative base. It preserves the configured ArcGIS Online OAuth workflow and `RxBurns\_Poly` integration while applying only the requested popup, alert, statistic-card, and initial Map Tools state corrections.
+This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.7 uses the user-provided September 2026 application files as the authoritative base. It preserves the current ArcGIS Online OAuth workflow, web map, `RxBurns\_Poly` integration, NWS workflows, dashboard, and editing behavior while adding a responsive, height-aware application layout.
 
 ## Run locally
 
@@ -12,6 +12,22 @@ python -m http.server 8000
 ```
 
 Open `http://localhost:8000`.
+
+## Version 3.7 changes
+
+* Added a fluid desktop map/operations split using `clamp()` and a user-resizable divider.
+* Stores the preferred operations-panel width locally and supports keyboard resizing with Left/Right Arrow, Home, and End.
+* Added container queries so weather cards, resource buttons, details, and smoke controls reflow based on the actual operations-panel width.
+* Added compact-laptop rules for displays at or below 1280 px wide or 850 px high, reducing whitespace rather than shrinking text below readable sizes.
+* Reworked Map Tools as a fixed-header/tab drawer with only the tool content scrolling; on phones it becomes a bottom sheet.
+* Added local vertical scrolling to dense weather tables on short laptop displays and preserved horizontal table scrolling for readable values.
+* Changed tablet layout to stack the operations content beneath the map rather than compressing both columns.
+* Improved phone header, navigation, Burn List cards, forms, dialogs, and weather-resource layouts.
+* Preserved the Version 3.6 OAuth/Microsoft 365 sign-in hotfix and current production configuration.
+
+## Version 3.6 changes
+
+* Preserves the OAuth authentication hotfix, organization-specific sign-in path, operations-panel initialization correction, and current GitHub Pages redirect workflow from the user-provided source package.
 
 ## Version 3.5 changes
 

@@ -32,3 +32,17 @@
 | Clear point forecast | Removes the forecast marker and restores the empty point-forecast panel |
 | Preserve drawings | Does not cancel SketchViewModel or clear the sketch layer |
 | Keyboard access | Escape clears the active map selection when no modal dialog is open |
+
+## Version 3.7 responsive application shell
+
+| Capability | Status | Implementation |
+|---|---|---|
+| Fluid desktop map/operations split | Implemented | `clamp()`-based panel width with min/max constraints |
+| User-resizable operations panel | Implemented | Pointer drag plus keyboard-accessible separator; width stored locally |
+| Short-height laptop mode | Implemented | Compact spacing at <=850 px viewport height without global text scaling |
+| Operations-panel container queries | Implemented | Weather cards, resource links, details, and headings reflow to actual panel width |
+| Map Tools internal scrolling | Implemented | Header and tabs remain visible; active tool body scrolls independently |
+| Tablet stacked layout | Implemented | Operations content moves below the map at <=960 px |
+| Phone Map Tools bottom sheet | Implemented | Drawer anchors to bottom and spans available width at <=700 px |
+| Responsive weather tables | Implemented | Local horizontal scrolling plus compact laptop vertical limits |
+| Responsive navigation/header | Implemented | Compact laptop/phone density and horizontally scrollable tabs |

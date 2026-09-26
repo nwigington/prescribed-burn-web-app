@@ -107,6 +107,97 @@ const dom = {};
 
 const OPERATIONS_PANEL_STORAGE_KEY =
   "cvd-prescribed-fire-operations-panel-collapsed";
+const OPERATIONS_PANEL_WIDTH_STORAGE_KEY =
+  "cvd-prescribed-fire-operations-panel-width";
+const OPERATIONS_PANEL_DESKTOP_QUERY = "(min-width: 961px)";
+const OPERATIONS_PANEL_MIN_WIDTH = 320;
+const OPERATIONS_PANEL_MAX_WIDTH = 600;
+
+/**
+ * Returns true when the application is using the desktop split layout.
+ */
+function usesDesktopSplitLayout() {
+  return window.matchMedia(OPERATIONS_PANEL_DESKTOP_QUERY).matches;
+}
+
+function getOperationsPanelWidthBounds() {
+  const width = dom.workspace?.getBoundingClientRect().width || window.innerWidth;
+  const min = OPERATIONS_PANEL_MIN_WIDTH;
+  const max = Math.max(
+    min,
+    Math.min(OPERATIONS_PANEL_MAX_WIDTH, Math.floor(width * 0.48))
+  );
+  return { min, max };
+}
+
+function resizeMapViewSoon(delay = 0) {
+  window.setTimeout(() => {
+    const mapView = state.view || state.mapElement?.view;
+    if (mapView && typeof mapView.resize === "function") mapView.resize();
+  }, delay);
+}
+
+function setOperationsPanelWidth(width, { persist = false } = {}) {
+  if (!dom.workspace || !usesDesktopSplitLayout()) return;
+
+  const bounds = getOperationsPanelWidthBounds();
+  const nextWidth = Math.round(Math.min(bounds.max, Math.max(bounds.min, Number(width) || bounds.min)));
+  dom.workspace.style.setProperty("--operations-panel-width-user", `${nextWidth}px`);
+
+  if (dom.operationsPanelResizer) {
+    dom.operationsPanelResizer.setAttribute("aria-valuemin", String(bounds.min));
+    dom.operationsPanelResizer.setAttribute("aria-valuemax", String(bounds.max));
+    dom.operationsPanelResizer.setAttribute("aria-valuenow", String(nextWidth));
+    dom.operationsPanelResizer.setAttribute("aria-valuetext", `${nextWidth} pixels wide`);
+  }
+
+  if (persist) {
+    try {
+      localStorage.setItem(OPERATIONS_PANEL_WIDTH_STORAGE_KEY, String(nextWidth));
+    } catch (error) {
+      console.warn("Operations panel width preference could not be saved.", error);
+    }
+  }
+
+  resizeMapViewSoon();
+}
+
+function syncOperationsPanelResponsiveState() {
+  if (!dom.workspace || !dom.operationsPanel) return;
+
+  const desktop = usesDesktopSplitLayout();
+  const collapsed = dom.workspace.classList.contains("is-operations-collapsed");
+  dom.operationsPanel.setAttribute("aria-hidden", String(desktop && collapsed));
+
+  if (dom.operationsPanelResizer) {
+    const resizerAvailable = desktop && !collapsed;
+    dom.operationsPanelResizer.setAttribute("aria-hidden", String(!resizerAvailable));
+    dom.operationsPanelResizer.tabIndex = resizerAvailable ? 0 : -1;
+  }
+
+  if (desktop) {
+    let savedWidth = null;
+    try {
+      const raw = localStorage.getItem(OPERATIONS_PANEL_WIDTH_STORAGE_KEY);
+      if (raw !== null && Number.isFinite(Number(raw))) savedWidth = Number(raw);
+    } catch (error) {
+      console.warn("Operations panel width preference could not be read.", error);
+    }
+    if (savedWidth !== null) {
+      setOperationsPanelWidth(savedWidth);
+    } else if (dom.operationsPanelResizer) {
+      const bounds = getOperationsPanelWidthBounds();
+      const measured = Math.round(dom.operationsPanel.getBoundingClientRect().width || bounds.min);
+      const current = Math.min(bounds.max, Math.max(bounds.min, measured));
+      dom.operationsPanelResizer.setAttribute("aria-valuemin", String(bounds.min));
+      dom.operationsPanelResizer.setAttribute("aria-valuemax", String(bounds.max));
+      dom.operationsPanelResizer.setAttribute("aria-valuenow", String(current));
+      dom.operationsPanelResizer.setAttribute("aria-valuetext", `${current} pixels wide`);
+    }
+  }
+
+  resizeMapViewSoon(state.reducedMotion ? 0 : 80);
+}
 
 /**
  * Expands or collapses the desktop operations panel.
@@ -124,21 +215,8 @@ function setOperationsPanelCollapsed(collapsed) {
     return;
   }
 
-  dom.workspace.classList.toggle(
-    "is-operations-collapsed",
-    collapsed
-  );
-
-  dom.operationsPanelToggle.setAttribute(
-    "aria-expanded",
-    String(!collapsed)
-  );
-
-  dom.operationsPanel.setAttribute(
-    "aria-hidden",
-    String(collapsed)
-  );
-
+  dom.workspace.classList.toggle("is-operations-collapsed", collapsed);
+  dom.operationsPanelToggle.setAttribute("aria-expanded", String(!collapsed));
   dom.operationsPanelArrow.textContent = collapsed ? "‹" : "›";
 
   const actionText = collapsed
@@ -147,13 +225,8 @@ function setOperationsPanelCollapsed(collapsed) {
 
   dom.operationsPanelToggleText.textContent = actionText;
   dom.operationsPanelToggle.title = actionText;
-
-  window.setTimeout(() => {
-    const mapView = state.view || state.mapElement?.view;
-    if (mapView && typeof mapView.resize === "function") {
-      mapView.resize();
-    }
-  }, state.reducedMotion ? 0 : 260);
+  syncOperationsPanelResponsiveState();
+  resizeMapViewSoon(state.reducedMotion ? 0 : 260);
 }
 
 function initializeOperationsPanelToggle() {
@@ -167,15 +240,9 @@ function initializeOperationsPanelToggle() {
     setOperationsPanelCollapsed(newCollapsedState);
 
     try {
-      localStorage.setItem(
-        OPERATIONS_PANEL_STORAGE_KEY,
-        String(newCollapsedState)
-      );
+      localStorage.setItem(OPERATIONS_PANEL_STORAGE_KEY, String(newCollapsedState));
     } catch (error) {
-      console.warn(
-        "Operations panel preference could not be saved.",
-        error
-      );
+      console.warn("Operations panel preference could not be saved.", error);
     }
   });
 
@@ -184,13 +251,77 @@ function initializeOperationsPanelToggle() {
     savedOperationsPanelState =
       localStorage.getItem(OPERATIONS_PANEL_STORAGE_KEY) === "true";
   } catch (error) {
-    console.warn(
-      "Operations panel preference could not be read.",
-      error
-    );
+    console.warn("Operations panel preference could not be read.", error);
   }
 
   setOperationsPanelCollapsed(savedOperationsPanelState);
+}
+
+function initializeOperationsPanelResizer() {
+  const resizer = dom.operationsPanelResizer;
+  if (!resizer || !dom.workspace) return;
+
+  let dragging = false;
+
+  const widthFromPointer = (clientX) => {
+    const bounds = dom.workspace.getBoundingClientRect();
+    return bounds.right - clientX;
+  };
+
+  const finishDrag = (event) => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("is-resizing-operations");
+    if (event?.pointerId !== undefined && resizer.hasPointerCapture?.(event.pointerId)) {
+      resizer.releasePointerCapture(event.pointerId);
+    }
+    const current = Number(resizer.getAttribute("aria-valuenow"));
+    if (Number.isFinite(current)) setOperationsPanelWidth(current, { persist: true });
+  };
+
+  resizer.addEventListener("pointerdown", (event) => {
+    if (!usesDesktopSplitLayout() || dom.workspace.classList.contains("is-operations-collapsed")) return;
+    dragging = true;
+    resizer.setPointerCapture?.(event.pointerId);
+    document.body.classList.add("is-resizing-operations");
+    setOperationsPanelWidth(widthFromPointer(event.clientX));
+    event.preventDefault();
+  });
+
+  resizer.addEventListener("pointermove", (event) => {
+    if (!dragging) return;
+    setOperationsPanelWidth(widthFromPointer(event.clientX));
+  });
+
+  resizer.addEventListener("pointerup", finishDrag);
+  resizer.addEventListener("pointercancel", finishDrag);
+
+  resizer.addEventListener("keydown", (event) => {
+    if (!usesDesktopSplitLayout()) return;
+    const bounds = getOperationsPanelWidthBounds();
+    const current = Number(resizer.getAttribute("aria-valuenow")) || Math.round((bounds.min + bounds.max) / 2);
+    let next = current;
+
+    if (event.key === "ArrowLeft") next = current + 16;
+    else if (event.key === "ArrowRight") next = current - 16;
+    else if (event.key === "Home") next = bounds.min;
+    else if (event.key === "End") next = bounds.max;
+    else return;
+
+    event.preventDefault();
+    setOperationsPanelWidth(next, { persist: true });
+  });
+
+  const desktopMedia = window.matchMedia(OPERATIONS_PANEL_DESKTOP_QUERY);
+  desktopMedia.addEventListener?.("change", syncOperationsPanelResponsiveState);
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(syncOperationsPanelResponsiveState, 100);
+  });
+
+  syncOperationsPanelResponsiveState();
 }
 
 initialize().catch((error) => {
@@ -203,6 +334,7 @@ initialize().catch((error) => {
 async function initialize() {
   cacheDom();
   initializeOperationsPanelToggle();
+  initializeOperationsPanelResizer();
   applyBrandingAndLinks();
   buildConditionForms();
   populateDirectionOptions();
@@ -285,7 +417,7 @@ async function initialize() {
 function cacheDom() {
   const ids = [
     "app", "appTitle", "appSubtitle", "brandLogo", "refreshButton", "lastUpdated", "accountButton",
-    "map", "operations-panel", "operationsPanelToggle", "operationsPanelArrow", "operationsPanelToggleText", "demoBanner", "dataModeBadge",
+    "map", "operations-panel", "operationsPanelResizer", "operationsPanelToggle", "operationsPanelArrow", "operationsPanelToggleText", "demoBanner", "dataModeBadge",
     "mapToolsToggle", "mapToolsDrawer", "closeMapTools",
     "identifyEmpty", "identifyContent", "identifyName", "identifyScore", "identifyDetails",
     "identifyConditions", "manageSelectedUnit", "updateSelectedForecast", "clearMapSelectionButton", "drawSquareButton",

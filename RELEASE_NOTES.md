@@ -1,3 +1,14 @@
+# Release Notes — Version 3.7
+
+## Responsive and adaptive layout
+
+* Added user-resizable desktop operations panel with pointer and keyboard control.
+* Added height-aware compact-laptop styling and container-query reflow for weather/operations content.
+* Reworked Map Tools so header/tabs remain visible while the active tool content scrolls.
+* Added tablet stacked layout and phone bottom-sheet Map Tools behavior.
+* Added local weather-table scrolling and narrower readable table minimums on laptops.
+* Preserved Version 3.6 OAuth, web map, service, NWS, and RxBurns_Poly configuration.
+
 # Release Notes — Version 3.5
 
 ## Targeted production-preparation corrections

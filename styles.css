@@ -29,6 +29,11 @@
   --radius-lg: 1.15rem;
   --header-height: 5.15rem;
   --nav-height: 3.7rem;
+  --text-xs: clamp(0.75rem, 0.70rem + 0.12vw, 0.82rem);
+  --text-sm: clamp(0.84rem, 0.80rem + 0.12vw, 0.92rem);
+  --text-base: clamp(0.94rem, 0.90rem + 0.14vw, 1rem);
+  --text-lg: clamp(1.04rem, 0.96rem + 0.28vw, 1.22rem);
+  --text-xl: clamp(1.32rem, 1.12rem + 0.58vw, 1.72rem);
   font-family: Arial, Helvetica, sans-serif;
 }
 
@@ -43,6 +48,7 @@ body {
     radial-gradient(circle at 17% -10%, rgba(239, 143, 60, 0.18), transparent 33rem),
     linear-gradient(135deg, #061019 0%, #0a1722 55%, #061019 100%);
   color: var(--text);
+  font-size: var(--text-base);
   line-height: 1.5;
 }
 
@@ -57,9 +63,9 @@ button:disabled { cursor: not-allowed; opacity: 0.52; }
 a { color: #b9ddf4; }
 a:hover { color: #ffffff; }
 h1, h2, h3, h4, p { margin-top: 0; }
-h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.22rem, 1rem + 0.75vw, 1.95rem); line-height: 1.15; letter-spacing: 0.01em; }
-h2 { margin-bottom: 0; font-size: 1.42rem; line-height: 1.22; }
-h3 { margin-bottom: 0.65rem; font-size: 1.05rem; line-height: 1.3; }
+h1 { margin-bottom: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(1.45rem, 1.05rem + 1vw, 2.05rem); line-height: 1.15; letter-spacing: 0.01em; }
+h2 { margin-bottom: 0; font-size: var(--text-xl); line-height: 1.22; }
+h3 { margin-bottom: 0.65rem; font-size: var(--text-lg); line-height: 1.3; }
 h4 { margin-bottom: 0.5rem; font-size: 1rem; }
 
 .sr-only {
@@ -92,7 +98,9 @@ h4 { margin-bottom: 0.5rem; font-size: 1rem; }
 .app-shell {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
 }
 .app-header {
   z-index: 50;
@@ -155,17 +163,37 @@ h4 { margin-bottom: 0.5rem; font-size: 1rem; }
 .nav-button.is-active { box-shadow: inset 0 -3px 0 var(--brand-gold); }
 .nav-button--utility { min-width: 0; margin-left: auto; }
 
-.workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(25rem, 31rem); min-height: 0; }
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 28.75rem);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
 .map-region { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #111820; }
 arcgis-map { display: block; width: 100%; height: 100%; }
 .operations-panel {
   min-width: 0;
-  overflow-y: auto;
+  min-height: 0;
+  overflow: hidden;
   border-left: 1px solid var(--border);
   background: linear-gradient(180deg, rgba(9,18,27,0.985), rgba(7,15,23,0.985));
   scrollbar-color: rgba(244,201,93,0.38) transparent;
+  container-type: inline-size;
+  container-name: operations;
 }
-.panel-view { min-height: 100%; padding: 1rem; }
+.panel-view {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 1rem;
+}
 .panel-heading-row { justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .panel-heading-row > * { min-width: 0; }
 .section-heading-row { align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
@@ -229,9 +257,13 @@ arcgis-map { display: block; width: 100%; height: 100%; }
   z-index: 15;
   top: 4.35rem;
   left: 4.85rem;
-  width: min(25rem, calc(100% - 5.6rem));
-  max-height: calc(100% - 7.5rem);
-  overflow: auto;
+  display: flex;
+  width: clamp(19rem, 30vw, 25rem);
+  max-width: calc(100% - 5.6rem);
+  max-height: calc(100% - 5.1rem);
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface-glass-strong);
@@ -241,10 +273,17 @@ arcgis-map { display: block; width: 100%; height: 100%; }
 .map-tools-drawer[hidden] { display: none; }
 .drawer-header { position: sticky; z-index: 2; top: 0; justify-content: space-between; padding: 0.75rem 0.85rem; border-bottom: 1px solid var(--border); background: rgba(211,102,76,0.9); }
 .drawer-header h3 { margin: 0; }
-.drawer-tabs { position: sticky; z-index: 2; top: 4.2rem; display: grid; grid-template-columns: repeat(3,1fr); border-bottom: 1px solid var(--border); background: rgba(7,16,24,0.96); }
+.drawer-tabs { z-index: 2; display: grid; grid-template-columns: repeat(3,1fr); flex: 0 0 auto; border-bottom: 1px solid var(--border); background: rgba(7,16,24,0.96); }
 .drawer-tab { min-height: 2.9rem; border: 0; border-radius: 0; }
 .drawer-tab.is-active { box-shadow: inset 0 -3px 0 var(--brand-gold); }
-.drawer-panel { padding: 0.9rem; }
+.drawer-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 0.9rem;
+}
 .drawer-panel p:last-child { margin-bottom: 0; }
 .drawer-unit-heading { justify-content: space-between; gap: 0.6rem; }
 .stacked-actions { display: grid; gap: 0.55rem; }
@@ -475,7 +514,17 @@ input[type="checkbox"], input[type="radio"] { width: 1.25rem; min-height: 1.25re
 .radio-row { display: flex; flex-wrap: wrap; gap: 0.45rem 0.85rem; }
 .radio-row label { display: inline-flex; align-items: center; color: var(--text); font-weight: 400; }
 
-.table-scroll { width: 100%; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable both-edges;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
 table { width: 100%; border-collapse: collapse; background: rgba(4,11,17,0.34); }
 th, td { padding: 0.62rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; font-size: 0.8rem; }
 th { position: sticky; top: 0; z-index: 1; background: #111f2b; color: #fff; }
@@ -520,11 +569,13 @@ tbody tr:hover { background: rgba(244,201,93,0.055); }
 .resource-links-row > * { flex: 1 1 10rem; }
 .resource-links-row--three { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; }
 .resource-links-row--three > * { display: inline-flex; min-width: 0; align-items: center; justify-content: center; padding-inline: 0.55rem; text-align: center; line-height: 1.25; }
+.weather-resource-actions:not(.resource-links-row--three) { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
+.weather-resource-actions:not(.resource-links-row--three) > * { min-width: 0; width: 100%; }
 .weather-summary { justify-content: space-between; gap: 0.8rem; padding: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(255,255,255,0.04); }
 .current-condition { display: grid; justify-items: end; text-align: right; }
 .current-condition strong { font-size: 2rem; }
 .current-condition span { color: var(--text-muted); font-size: 0.82rem; }
-.condition-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0.55rem; margin: 0.7rem 0; }
+.condition-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr)); gap: 0.55rem; margin: 0.7rem 0; }
 .condition-grid div { padding: 0.65rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: rgba(255,255,255,0.035); }
 .condition-grid dt { color: var(--text-quiet); font-size: 0.72rem; font-weight: 800; text-transform: uppercase; }
 .condition-grid dd { margin: 0.15rem 0 0; font-weight: 800; }
@@ -571,28 +622,245 @@ tbody tr:hover { background: rgba(244,201,93,0.055); }
 .help-layout { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 1rem; }
 .help-layout section { padding: 0.8rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(255,255,255,0.035); }
 
-@media (max-width: 76rem) {
-  .workspace { grid-template-columns: minmax(0,1fr) minmax(22rem,27rem); }
-  .updated-block { display: none; }
+/* --------------------------------------------------------------------------
+   Responsive layout system
+   -------------------------------------------------------------------------- */
+
+/* The NWS Spot Forecast control remains readable in every panel width. */
+#panel-planner #spotForecastPlannerLink {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.7rem 1rem;
+  text-align: center;
+  line-height: 1.25;
+  white-space: normal;
 }
 
-@media (max-width: 62rem) {
-  body { overflow: auto; }
-  .app-shell { min-height: 100%; height: auto; grid-template-rows: auto auto auto auto; }
-  .workspace { grid-template-columns: 1fr; grid-template-rows: minmax(34rem,62vh) auto; }
-  .operations-panel { min-height: 35rem; overflow: visible; border-left: 0; border-top: 1px solid var(--border); }
-  .app-footer { flex-direction: column; align-items: flex-start; }
+/* Desktop split layout with user-resizable operations panel. */
+@media (min-width: 961px) {
+  .workspace {
+    --operations-panel-width-default: clamp(20rem, 28vw, 28.75rem);
+    --operations-panel-width: var(--operations-panel-width-user, var(--operations-panel-width-default));
+    --operations-toggle-size: 2rem;
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) var(--operations-panel-width);
+    transition: grid-template-columns 240ms ease;
+  }
+
+  .operations-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    opacity: 1;
+    visibility: visible;
+    transition: opacity 160ms ease, visibility 160ms ease;
+  }
+
+  .operations-panel-resizer {
+    position: absolute;
+    z-index: 39;
+    top: 0;
+    right: calc(var(--operations-panel-width) - 0.3rem);
+    bottom: 0;
+    display: block;
+    width: 0.6rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .operations-panel-resizer::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(50% - 1px);
+    width: 2px;
+    background: rgba(244, 201, 93, 0.24);
+    content: "";
+    transition: width 140ms ease, left 140ms ease, background-color 140ms ease;
+  }
+
+  .operations-panel-resizer:hover::before,
+  .operations-panel-resizer:focus-visible::before,
+  body.is-resizing-operations .operations-panel-resizer::before {
+    left: calc(50% - 2px);
+    width: 4px;
+    background: rgba(244, 201, 93, 0.82);
+  }
+
+  .operations-panel-resizer:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: -1px;
+  }
+
+  body.is-resizing-operations {
+    cursor: col-resize;
+    user-select: none;
+  }
+
+  .operations-panel-toggle {
+    position: absolute;
+    z-index: 40;
+    top: 50%;
+    right: calc(var(--operations-panel-width) - (var(--operations-toggle-size) / 2));
+    display: flex;
+    width: var(--operations-toggle-size);
+    height: 4.5rem;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: #ffffff;
+    background: linear-gradient(180deg, rgba(24, 42, 49, 0.98), rgba(12, 27, 34, 0.98));
+    border: 1px solid rgba(242, 201, 76, 0.75);
+    border-radius: 0.65rem 0 0 0.65rem;
+    box-shadow: -4px 0 14px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    font-family: inherit;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+    transform: translateY(-50%);
+    transition: right 240ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  }
+
+  .operations-panel-toggle:hover {
+    background: linear-gradient(180deg, rgba(48, 67, 73, 0.99), rgba(20, 38, 45, 0.99));
+    border-color: #f2c94c;
+  }
+
+  .operations-panel-toggle:focus-visible { outline: 3px solid #ffe680; outline-offset: 3px; }
+  .operations-panel-toggle:active { transform: translateY(-50%) scale(0.96); }
+
+  .workspace.is-operations-collapsed { grid-template-columns: minmax(0, 1fr) 0; }
+  .workspace.is-operations-collapsed .operations-panel {
+    min-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .workspace.is-operations-collapsed .operations-panel-toggle { right: 0.5rem; border-radius: 0.65rem; }
+  .workspace.is-operations-collapsed .operations-panel-resizer { display: none; }
 }
 
-@media (max-width: 43rem) {
-  .app-header { align-items: flex-start; }
+/* Operations panel responds to its own width, not only to the browser width. */
+@container operations (max-width: 27rem) {
+  .panel-view { padding: 0.78rem; }
+  .resource-links-row--three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .resource-links-row--three > :first-child { grid-column: 1 / -1; }
+  .section-heading-row { gap: 0.55rem; }
+  .weather-summary { align-items: flex-start; flex-direction: column; }
+  .current-condition { justify-items: start; text-align: left; }
+}
+
+@container operations (max-width: 22rem) {
+  .panel-heading-row,
+  .section-heading-row { align-items: flex-start; flex-direction: column; }
+  .section-heading-actions { width: 100%; justify-content: space-between; }
+  .details-grid,
+  .smoke-controls { grid-template-columns: 1fr; }
+  .unit-subnav { grid-template-columns: 1fr; }
+  .resource-links-row--three,
+  .weather-resource-actions:not(.resource-links-row--three) { grid-template-columns: 1fr; }
+  .resource-links-row--three > :first-child { grid-column: auto; }
+  .workflow-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .workflow-actions > * { padding-inline: 0.35rem; font-size: var(--text-sm); }
+}
+
+/* Standard desktop and compact laptop widths. */
+@media (max-width: 1280px) and (min-width: 961px), (max-height: 850px) and (min-width: 961px) {
+  :root { --header-height: 4.35rem; --nav-height: 3.2rem; }
+  .app-header { min-height: var(--header-height); padding: 0.48rem 0.8rem; }
   .brand-logo { width: 3rem; height: 3rem; }
-  .header-actions { align-self: center; }
-  .header-actions .glass-button { width: 2.75rem; overflow: hidden; font-size: 0; }
-  .header-actions .glass-button span { font-size: 1.15rem; }
-  .nav-button { min-width: 6.8rem; padding: 0.52rem 0.75rem; font-size: 0.82rem; }
+  .brand-block { gap: 0.65rem; }
+  .eyebrow { font-size: 0.68rem; }
+  .header-actions { gap: 0.5rem; }
+  .updated-block { display: none; }
+  .view-nav { min-height: var(--nav-height); padding: 0.3rem 0.7rem; }
+  .nav-button { min-width: 6.9rem; padding: 0.5rem 0.78rem; font-size: var(--text-sm); }
+  .panel-view { padding: 0.72rem; }
+  .panel-heading-row { margin-bottom: 0.72rem; }
+  .content-section { margin-top: 0.72rem; padding: 0.7rem; }
+  .kpi-card { min-height: 5.6rem; padding: 0.65rem; gap: 0.35rem; }
+  .kpi-value { font-size: 1.7rem; }
+  .resource-card { min-height: 4.8rem; padding: 0.58rem; }
+  .workflow-list { gap: 0.55rem; }
+  .map-tools-toggle { top: 0.55rem; }
+  .map-tools-drawer {
+    top: 3.85rem;
+    max-height: calc(100% - 4.55rem);
+    width: clamp(18.5rem, 31vw, 23.5rem);
+  }
+  .drawer-header { padding: 0.6rem 0.75rem; }
+  .drawer-tab { min-height: 2.65rem; }
+  .drawer-panel { padding: 0.7rem; }
+  .detail-list { gap: 0.32rem 0.6rem; margin: 0.5rem 0; }
+  .stacked-actions { gap: 0.42rem; }
+  .conditions-disclosure { margin-top: 0.6rem; padding-top: 0.5rem; }
+  #panel-planner .table-scroll { max-height: min(18rem, 36vh); }
+  #unitWeatherSection .table-scroll { max-height: min(19rem, 38vh); }
+  .forecast-table { min-width: 38rem; }
+  .forecast-matrix { min-width: 52rem; }
+  th, td { padding: 0.5rem; }
+  .app-footer { min-height: 2rem; padding-block: 0.28rem; }
+}
+
+/* Tablet: map above operations content. */
+@media (max-width: 960px) {
+  body { overflow: auto; }
+  .app-shell { min-height: 100dvh; height: auto; grid-template-rows: auto auto auto auto; }
+  .workspace {
+    height: auto;
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(28rem, 58dvh) auto;
+    overflow: visible;
+  }
+  .operations-panel {
+    min-height: 32rem;
+    overflow: visible;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+  .panel-view { height: auto; max-height: none; overflow: visible; }
+  .operations-panel-toggle, .operations-panel-resizer { display: none !important; }
+  .app-footer { flex-direction: column; align-items: flex-start; }
+  .updated-block { display: none; }
+  .map-tools-drawer { max-height: min(70dvh, calc(100% - 5rem)); }
+  .forecast-table { min-width: 38rem; }
+}
+
+/* Phone and narrow tablet: bottom-sheet map tools and single-column forms. */
+@media (max-width: 700px) {
+  :root { --header-height: 4.15rem; --nav-height: 3.15rem; }
+  .app-header { align-items: center; padding: 0.5rem 0.6rem; }
+  .brand-logo { width: 2.8rem; height: 2.8rem; }
+  .brand-block { gap: 0.55rem; }
+  .eyebrow { display: none; }
+  .app-header h1 { font-size: clamp(1.25rem, 5vw, 1.55rem); }
+  .header-actions { align-self: center; gap: 0.4rem; }
+  #refreshButton { width: 2.75rem; padding: 0; overflow: hidden; font-size: 0; }
+  #refreshButton span { font-size: 1.1rem; }
+  #accountButton { max-width: 7rem; padding-inline: 0.65rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
+  .view-nav { padding-inline: 0.5rem; }
+  .tablist { gap: 0.35rem; scrollbar-width: none; }
+  .tablist::-webkit-scrollbar { display: none; }
+  .nav-button { min-width: max-content; padding: 0.5rem 0.7rem; font-size: var(--text-sm); }
+  .workspace { grid-template-rows: minmax(27rem, 60dvh) auto; }
   .map-tools-toggle { top: 0.55rem; left: 4.45rem; }
-  .map-tools-drawer { top: 4rem; left: 4.45rem; width: calc(100% - 4.95rem); max-height: calc(100% - 7rem); }
+  .map-tools-drawer {
+    top: auto;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    left: 0.5rem;
+    width: auto;
+    max-width: none;
+    max-height: min(70dvh, 38rem);
+    border-radius: 1rem;
+  }
   .section-heading-row { align-items: center; }
   .section-heading-actions { flex-wrap: wrap; }
   .alert-card-footer, .priority-card-footer { align-items: flex-start; flex-direction: column; }
@@ -612,168 +880,37 @@ tbody tr:hover { background: rgba(244,201,93,0.055); }
   .burn-card-mobile dd { margin: 0; }
   .pagination-row { flex-wrap: wrap; }
   .unit-subnav { grid-template-columns: 1fr; }
-  .workflow-actions, .resource-links-row--three { grid-template-columns: 1fr; }
+  .workflow-actions, .resource-links-row--three, .weather-resource-actions { grid-template-columns: 1fr; }
   .dialog-actions { flex-direction: column-reverse; }
   .dialog-actions > * { width: 100%; }
+  .forecast-table { min-width: 34rem; }
+  .forecast-matrix { min-width: 46rem; }
+}
+
+@media (max-width: 420px) {
+  .brand-logo { width: 2.45rem; height: 2.45rem; }
+  .app-header h1 { font-size: 1.2rem; }
+  #accountButton { max-width: 5.75rem; }
+  .map-tools-toggle { left: 4.2rem; padding-inline: 0.65rem; }
+  .map-tools-drawer { max-height: 72dvh; }
+  .burn-card-mobile dl { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .workspace, .operations-panel, .operations-panel-toggle, .operations-panel-resizer { transition: none; }
 }
 
 @media (forced-colors: active) {
-  .nav-button, .glass-button, .primary-button, .secondary-button, .danger-button, .resource-card, .content-section, .kpi-card, .map-tools-drawer, .app-dialog, .section-collapse-button, .alert-card, .priority-card { forced-color-adjust: auto; border: 1px solid ButtonText; }
+  .nav-button, .glass-button, .primary-button, .secondary-button, .danger-button, .resource-card, .content-section, .kpi-card, .map-tools-drawer, .app-dialog, .section-collapse-button, .alert-card, .priority-card {
+    forced-color-adjust: auto;
+    border: 1px solid ButtonText;
+  }
   .legend-symbol, .forecast-chip { border: 2px solid CanvasText; }
-}
-
-/* Center the NWS Spot Forecast button in the current-weather panel */
-#panel-planner #spotForecastPlannerLink {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 0.7rem 1rem;
-  text-align: center;
-  line-height: 1.25;
-  white-space: normal;
-}
-
-@media (min-width: 901px) {
-  .workspace {
-    /*
-     * Approximately two-thirds of a previous 42rem panel.
-     * Change this one value to fine-tune the panel width.
-     */
-    --operations-panel-width: clamp(24rem, 28vw, 30rem);
-    --operations-toggle-size: 2rem;
-
-    position: relative;
-    grid-template-columns:
-      minmax(0, 1fr)
-      var(--operations-panel-width);
-
-    transition: grid-template-columns 240ms ease;
-  }
-
-  .operations-panel {
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-
-    opacity: 1;
-    visibility: visible;
-
-    transition:
-      opacity 160ms ease,
-      visibility 160ms ease;
-  }
-
-  /* Arrow button between the map and operations panel */
-  .operations-panel-toggle {
-    position: absolute;
-    z-index: 40;
-    top: 50%;
-
-    /*
-     * Places the center of the button over the left edge
-     * of the operations panel.
-     */
-    right: calc(
-      var(--operations-panel-width) -
-      (var(--operations-toggle-size) / 2)
-    );
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    width: var(--operations-toggle-size);
-    height: 4.5rem;
-    padding: 0;
-
-    color: #ffffff;
-    background:
-      linear-gradient(
-        180deg,
-        rgba(24, 42, 49, 0.98),
-        rgba(12, 27, 34, 0.98)
-      );
-
-    border: 1px solid rgba(242, 201, 76, 0.75);
-    border-radius: 0.65rem 0 0 0.65rem;
-    box-shadow:
-      -4px 0 14px rgba(0, 0, 0, 0.32),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12);
-
-    font-family: inherit;
-    font-size: 2rem;
-    font-weight: 700;
-    line-height: 1;
-
-    cursor: pointer;
-    transform: translateY(-50%);
-
-    transition:
-      right 240ms ease,
-      background-color 160ms ease,
-      border-color 160ms ease,
-      transform 160ms ease;
-  }
-
-  .operations-panel-toggle:hover {
-    background:
-      linear-gradient(
-        180deg,
-        rgba(48, 67, 73, 0.99),
-        rgba(20, 38, 45, 0.99)
-      );
-
-    border-color: #f2c94c;
-  }
-
-  .operations-panel-toggle:focus-visible {
-    outline: 3px solid #ffe680;
-    outline-offset: 3px;
-  }
-
-  .operations-panel-toggle:active {
-    transform: translateY(-50%) scale(0.96);
-  }
-
-  /* Collapsed layout */
-  .workspace.is-operations-collapsed {
-    grid-template-columns: minmax(0, 1fr) 0;
-  }
-
-  .workspace.is-operations-collapsed .operations-panel {
-    min-width: 0;
-    overflow: hidden;
-    opacity: 0;
-    visibility: hidden;
-    pointer-events: none;
-  }
-
-  .workspace.is-operations-collapsed .operations-panel-toggle {
-    right: 0.5rem;
-    border-radius: 0.65rem;
-  }
-}
-
-/*
- * Keep the existing mobile/tablet layout.
- * The side-arrow control is hidden when the operations panel
- * is no longer displayed as a desktop sidebar.
- */
-@media (max-width: 900px) {
-  .operations-panel-toggle {
-    display: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .workspace,
-  .operations-panel,
-  .operations-panel-toggle {
-    transition: none;
-  }
+  .operations-panel-resizer::before { background: ButtonText; }
 }
