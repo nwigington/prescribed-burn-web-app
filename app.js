@@ -794,7 +794,7 @@ async function loadUnits() {
     populateUnitFormOptions();
     populateBurnFilterOptions();
     state.isDemo = false;
-    setDataMode("Live ArcGIS layer", false);
+    setDataMode("Live Layer", false);
     dom.demoBanner.hidden = true;
     return;
   }
