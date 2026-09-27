@@ -1,17 +1,32 @@
-# California State Parks Prescribed Fire Operations Hub — Version 3.7
+# California State Parks Prescribed Fire Operations Hub — Version 3.8
 
-This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.7 uses the user-provided September 2026 application files as the authoritative base. It preserves the current ArcGIS Online OAuth workflow, web map, `RxBurns\_Poly` integration, NWS workflows, dashboard, and editing behavior while adding a responsive, height-aware application layout.
+This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.8 uses the user-provided Version 3.7 application as the base and the supplied `CVD_PrescribedFire_StagingMap_FL.gdb` as the authoritative related-table schema. It preserves the current ArcGIS Online OAuth workflow, web map, `RxBurns_Poly`, NWS workflows, responsive layout, dashboard, and editing behavior while adding durable related-table persistence and fire-effects report-data export.
 
 ## Run locally
 
 Serve the folder through HTTP rather than opening `index.html` with a `file:///` address.
 
 ```powershell
-cd "C:\\path\\to\\CVD\_Prescribed\_Fire\_GIS\_Hub\_v3\_5"
+cd "C:\\path\\to\\CVD_Prescribed_Fire_GIS_Hub_v3_8"
 python -m http.server 8000
 ```
 
 Open `http://localhost:8000`.
+
+
+## Version 3.8 changes
+
+* Reviewed the supplied file geodatabase containing 25 `RxBurns_Poly` features and seven planning/notification related tables.
+* Added runtime discovery of the exact published related tables from the same FeatureServer as `RxBurns_Poly`; numeric table IDs do not need to be hard-coded.
+* Preferred weather conditions now load from and save to `Preferred_Weather_Prescriptions`.
+* Successful forecast refreshes create `Forecast_Runs` and related `Forecast_Periods_and_Scores` rows; persisted latest scores are restored after reload.
+* Burn events now load from and save to `Burn_Events`, with actual weather/fire-behavior observations stored in `Actual_Weather_and_Fire_Behavior`.
+* Notification subscribers now load from and save to `Notification_Subscriptions`; removal deactivates the record.
+* `Notification_Delivery_Log` is treated as browser read-only and reserved for the future server-side delivery process.
+* Added related-data connection diagnostics to the Account dialog.
+* Added **Download report data** to the Burn List. It generates a structured JSON file containing burn-unit attributes/geometry and related prescriptions, forecast history/scores, burn events, and actual weather/fire behavior.
+* Notification PII is excluded from report exports by default.
+* Updated the configured parent end-date field to the supplied schema's `END_DATE`.
 
 ## Version 3.7 changes
 
@@ -104,10 +119,30 @@ authentication: {
 
 prescribedBurns: {
   serviceUrl: "https://services2.arcgis.com/.../FeatureServer/0",
-  webMapLayerTitle: "RxBurns\_Poly",
+  webMapLayerTitle: "RxBurns_Poly",
   layerId: 0,
   allowFeatureServiceEdits: true,
   requireOAuthForEdits: true
+},
+
+relatedData: {
+  enabled: true,
+  serviceRoot: "",
+  requireOAuthForEdits: true,
+  loadLatestForecastScoresOnStart: true,
+  tableNames: {
+    weatherPrescriptions: "Preferred_Weather_Prescriptions",
+    forecastRuns: "Forecast_Runs",
+    forecastPeriods: "Forecast_Periods_and_Scores",
+    burnEvents: "Burn_Events",
+    actualWeather: "Actual_Weather_and_Fire_Behavior",
+    notificationSubscriptions: "Notification_Subscriptions",
+    notificationDeliveries: "Notification_Delivery_Log"
+  },
+  export: {
+    filePrefix: "CVD_PrescribedFire_FireEffects_ReportData",
+    includeNotificationData: false
+  }
 }
 ```
 
@@ -127,16 +162,11 @@ For a map click or selected burn unit, the application:
 
 NWS does not provide every advanced fire-behavior value through the general point forecast. Dispersion Index and LVORI remain `n/a` unless a future approved source is configured. The official **NWS Spot Forecast** link remains available for operational requests.
 
-## Production limitations still requiring a data design
+## Related-data persistence
 
-The following interfaces are present but should not be treated as durable production records until related hosted tables or approved services are configured:
+Version 3.8 is wired to the supplied GlobalID/GUID relationship design. When the seven tables are published with `RxBurns_Poly` in the same feature service and shared/editable to the OAuth user, the app persists preferred prescriptions, forecast runs/periods and scores, burn events, actual weather/fire behavior, and notification subscriptions. See `FGDB_SCHEMA_REVIEW_v3_8.md` and `ARCGIS_ONLINE_SETUP.md`.
 
-* burn events and actual-weather observations;
-* preferred-condition records and forecast snapshots;
-* notification subscribers and email delivery;
-* conceptual smoke-sensitive area results.
-
-For production, use related tables keyed by GlobalID/GUID, editor tracking, authenticated edits, and an approved notification or integration service. Do not store subscriber email addresses in unsecured client-side state.
+The remaining production dependencies are the approved server-side notification-delivery process and any future authoritative smoke/monitoring datasets. `Notification_Delivery_Log` is intentionally not written by the browser.
 
 ## Files
 
@@ -148,5 +178,8 @@ For production, use related tables keyed by GlobalID/GUID, editor tracking, auth
 * `PRODUCTION\_CHECKLIST.md` — deployment and acceptance checklist
 * `ACCESSIBILITY.md` — accessibility implementation and tests
 * `FEATURE\_MATRIX.md` — feature status and production dependencies
-* `RELEASE\_NOTES.md` — version-specific corrections
+* `FGDB_SCHEMA_REVIEW_v3_8.md` — reviewed file-geodatabase tables, relationships, counts, and schema observations
+* `FIRE_EFFECTS_REPORT_EXPORT.md` — report-data download structure and handling guidance
+* `RELEASE_NOTES_v3_8.md` — Version 3.8 persistence/export changes
+* `RELEASE_NOTES.md` — current and prior release notes
 

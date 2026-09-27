@@ -309,7 +309,10 @@
           <section id="panel-list" class="panel-view panel-view--wide" role="tabpanel" aria-labelledby="tab-list" data-view="list" hidden>
             <div class="panel-heading-row">
               <div><p class="section-kicker">Records and filters</p><h2>Burn List</h2></div>
-              <span id="burnResultCount" class="result-count" aria-live="polite">0 records</span>
+              <div class="panel-heading-actions">
+                <span id="burnResultCount" class="result-count" aria-live="polite">0 records</span>
+                <button id="downloadReportDataButton" class="secondary-button secondary-button--compact" type="button" title="Download burn-unit and related fire-effects data as JSON">Download report data</button>
+              </div>
             </div>
 
             <details class="filter-disclosure" open>
@@ -531,6 +534,8 @@
       <div class="dialog-content">
         <p><strong>Status:</strong> <span id="accountStatus">Not signed in</span></p>
         <p id="accountUser" class="panel-help">Configure ArcGIS OAuth in <code>config.js</code> to use organization-only maps and layers.</p>
+        <p><strong>Related data:</strong> <span id="relatedDataStatus">Not initialized</span></p>
+        <p id="relatedDataDetail" class="panel-help">Preferred prescriptions, forecasts, burn events, actual weather, and subscribers will be stored in related tables when available.</p>
         <div class="button-row">
           <button id="arcgisSignInButton" class="primary-button" type="button">Sign in with ArcGIS</button>
           <button id="logoutButton" class="secondary-button" type="button" disabled>Log out</button>

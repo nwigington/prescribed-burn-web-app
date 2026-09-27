@@ -90,3 +90,9 @@ The Map Tools Identify tab includes a keyboard-operable **Clear selection** butt
 - At phone widths Map Tools becomes a bottom sheet and navigation remains horizontally scrollable.
 - Compact-height rules reduce spacing and padding rather than shrinking core text or interactive targets.
 - Forecast tables retain local horizontal scrolling so values remain readable at browser zoom and narrow widths.
+
+## Version 3.8 related data and report export
+
+- The Burn List report-data download is a native keyboard-operable button with a text label and busy/disabled state while the file is assembled.
+- Related-data connection status is exposed as text in the Account dialog rather than color alone.
+- Related-table failures use the application's live-status announcements and do not remove the non-map Burn List alternative.

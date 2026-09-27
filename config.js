@@ -67,11 +67,36 @@ window.APP_CONFIG = {
       ignitionMethod: "IGNITION_METHOD",
       acres: "ACRES_BURNED",
       startDate: "START_DATE",
-      endDate: "COMPLETED_DATE",
+      endDate: "END_DATE",
       lastBurned: "LAST_BURNED",
       objective: "OBJECTIVE",
       notes: "COMMENTS",
       lastUpdated: "LAST_UPDATED"
+    }
+  },
+
+  relatedData: {
+    // Tables reviewed from CVD_PrescribedFire_StagingMap_FL.gdb. The app
+    // discovers their numeric table IDs from the feature-service root at runtime.
+    enabled: true,
+    serviceRoot: "",
+    requireOAuthForEdits: true,
+    loadLatestForecastScoresOnStart: true,
+    tableNames: {
+      weatherPrescriptions: "Preferred_Weather_Prescriptions",
+      forecastRuns: "Forecast_Runs",
+      forecastPeriods: "Forecast_Periods_and_Scores",
+      burnEvents: "Burn_Events",
+      actualWeather: "Actual_Weather_and_Fire_Behavior",
+      notificationSubscriptions: "Notification_Subscriptions",
+      notificationDeliveries: "Notification_Delivery_Log"
+    },
+    export: {
+      filePrefix: "CVD_PrescribedFire_FireEffects_ReportData",
+      // Subscriber names, usernames, email addresses, unsubscribe hashes, and
+      // delivery logs are omitted by default because they are not needed for
+      // fire-effects reporting and may contain personal information.
+      includeNotificationData: false
     }
   },
 

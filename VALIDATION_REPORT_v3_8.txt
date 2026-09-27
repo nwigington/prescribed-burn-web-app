@@ -1,0 +1,11 @@
+CVD Prescribed Fire GIS Hub v3.8 static validation
+==========================================================
+HTML ids: 185; duplicates: none
+Cached DOM ids: 163; missing in HTML: none
+ARIA controls missing targets: none
+Labels missing targets: none
+CSS brace balance: 0
+FGDB datasets: 9
+Expected v3.8 related tables missing from FGDB: none
+Download report button present: True
+Related-data status present: True
