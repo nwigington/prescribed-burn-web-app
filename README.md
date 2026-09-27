@@ -1,6 +1,6 @@
-# California State Parks Prescribed Fire Operations Hub — Version 3.8
+# California State Parks Prescribed Fire Operations Hub — Version 3.9
 
-This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.8 uses the user-provided Version 3.7 application as the base and the supplied `CVD_PrescribedFire_StagingMap_FL.gdb` as the authoritative related-table schema. It preserves the current ArcGIS Online OAuth workflow, web map, `RxBurns_Poly`, NWS workflows, responsive layout, dashboard, and editing behavior while adding durable related-table persistence and fire-effects report-data export.
+This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.9 uses the user-provided Version 3.8 application as the base and the supplied `CVD_PrescribedFire_StagingMap_FL.gdb` as the authoritative related-table schema. It preserves the current ArcGIS Online OAuth workflow, web map, `RxBurns_Poly`, NWS workflows, responsive layout, dashboard, and editing behavior while adding durable related-table persistence and fire-effects report-data export.
 
 ## Run locally
 
@@ -14,7 +14,22 @@ python -m http.server 8000
 Open `http://localhost:8000`.
 
 
-## Version 3.8 changes
+## Version 3.9 related-table correction
+
+Version 3.9 corrects a related-table discovery defect identified during live ArcGIS Online testing. The file geodatabase contains internal table names such as `Burn_Events`, but the published FeatureServer exposes display names such as **Burn Events**. Version 3.8 compared those names literally, so no related tables were discovered and the persistence functions could return without writing a record. The UI could therefore display a newly added event until refresh even though ArcGIS Online contained no row.
+
+Version 3.9 now:
+
+* uses the published FeatureServer display names;
+* uses stable table IDs 10, 20, 21, 30, 31, 40, and 41 as a fallback;
+* normalizes spaces, underscores, punctuation, and case during table discovery;
+* prefers the configured authoritative `CVD_PrescribedFire_StagingMap` FeatureServer over a web-map view when locating related tables;
+* refuses to report a related-record save as successful when related storage is disconnected; and
+* reads the saved record back from ArcGIS Online before the UI reports success.
+
+After deployment, the Account dialog should report **Related data: Connected (7/7)** before production related records are entered.
+
+## Version 3.9 changes
 
 * Reviewed the supplied file geodatabase containing 25 `RxBurns_Poly` features and seven planning/notification related tables.
 * Added runtime discovery of the exact published related tables from the same FeatureServer as `RxBurns_Poly`; numeric table IDs do not need to be hard-coded.
@@ -164,7 +179,7 @@ NWS does not provide every advanced fire-behavior value through the general poin
 
 ## Related-data persistence
 
-Version 3.8 is wired to the supplied GlobalID/GUID relationship design. When the seven tables are published with `RxBurns_Poly` in the same feature service and shared/editable to the OAuth user, the app persists preferred prescriptions, forecast runs/periods and scores, burn events, actual weather/fire behavior, and notification subscriptions. See `FGDB_SCHEMA_REVIEW_v3_8.md` and `ARCGIS_ONLINE_SETUP.md`.
+Version 3.9 is wired to the supplied GlobalID/GUID relationship design. When the seven tables are published with `RxBurns_Poly` in the same feature service and shared/editable to the OAuth user, the app persists preferred prescriptions, forecast runs/periods and scores, burn events, actual weather/fire behavior, and notification subscriptions. See `FGDB_SCHEMA_REVIEW_v3_8.md` and `ARCGIS_ONLINE_SETUP.md`.
 
 The remaining production dependencies are the approved server-side notification-delivery process and any future authoritative smoke/monitoring datasets. `Notification_Delivery_Log` is intentionally not written by the browser.
 
@@ -180,6 +195,6 @@ The remaining production dependencies are the approved server-side notification-
 * `FEATURE\_MATRIX.md` — feature status and production dependencies
 * `FGDB_SCHEMA_REVIEW_v3_8.md` — reviewed file-geodatabase tables, relationships, counts, and schema observations
 * `FIRE_EFFECTS_REPORT_EXPORT.md` — report-data download structure and handling guidance
-* `RELEASE_NOTES_v3_8.md` — Version 3.8 persistence/export changes
+* `RELEASE_NOTES_v3_8.md` — Version 3.9 persistence/export changes
 * `RELEASE_NOTES.md` — current and prior release notes
 

@@ -1,0 +1,13 @@
+Duplicate HTML IDs: []
+Missing label targets: []
+Missing aria-controls targets: []
+Cache-busted config.js reference: True
+Cache-busted styles.css reference: True
+Cache-busted app.js reference: True
+Preferred Weather Prescriptions / ID 10: True
+Forecast Runs / ID 20: True
+Forecast Periods and Scores / ID 21: True
+Burn Events / ID 30: True
+Actual Weather and Fire Behavior / ID 31: True
+Notification Subscriptions / ID 40: True
+Notification Delivery Log / ID 41: True

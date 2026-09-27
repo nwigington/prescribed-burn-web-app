@@ -1068,7 +1068,7 @@ async function resolveFeatureLayerUrl(serviceUrl, configuredLayerId, preferredTi
 }
 
 /* --------------------------------------------------------------------------
- * Related-table persistence — v3.8
+ * Related-table persistence — v3.9
  * Schema reviewed from CVD_PrescribedFire_StagingMap_FL.gdb.
  * -------------------------------------------------------------------------- */
 
@@ -1078,6 +1078,13 @@ function getRelatedDataConfig() {
 
 function normalizeGuid(value) {
   return String(value || "").trim().replace(/[{}]/g, "").toUpperCase();
+}
+
+function canonicalServiceName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
 }
 
 function escapeSqlLiteral(value) {
@@ -1122,10 +1129,17 @@ async function initializeRelatedData() {
     return false;
   }
 
-  const sourceUrl = config.serviceRoot || state.sourceLayer.url || CONFIG.prescribedBurns.serviceUrl;
+  // The related tables belong to the authoritative staging FeatureServer.
+  // Prefer an explicitly configured service root, then the configured
+  // prescribed-burn service URL. A web-map layer can be a hosted view that
+  // does not expose the parent service's related tables, so it is only the
+  // final fallback.
+  const sourceUrl = config.serviceRoot
+    || CONFIG.prescribedBurns?.serviceUrl
+    || state.sourceLayer.url;
   const serviceRoot = featureServiceRootFromUrl(sourceUrl);
   if (!serviceRoot || !/\/FeatureServer$/i.test(serviceRoot)) {
-    setRelatedDataStatus("Unavailable", "The feature-service root could not be derived from RxBurns_Poly.");
+    setRelatedDataStatus("Unavailable", "The feature-service root could not be derived from the configured RxBurns_Poly service.");
     return false;
   }
 
@@ -1142,32 +1156,72 @@ async function initializeRelatedData() {
 
     const serviceTables = Array.isArray(metadata.tables) ? metadata.tables : [];
     const configuredNames = config.tableNames || {};
+    const configuredIds = config.tableIds || {};
     const { FeatureLayer } = state.modules;
 
     for (const [key, configuredName] of Object.entries(configuredNames)) {
-      const tableInfo = serviceTables.find((entry) => normalize(entry.name) === normalize(configuredName));
+      const expectedId = Number(configuredIds[key]);
+      const wantedName = canonicalServiceName(configuredName);
+      let tableInfo = Number.isInteger(expectedId)
+        ? serviceTables.find((entry) => Number(entry.id) === expectedId)
+        : null;
+
       if (!tableInfo) {
-        state.related.errors.push(`Missing table: ${configuredName}`);
+        tableInfo = serviceTables.find((entry) => canonicalServiceName(entry.name) === wantedName);
+      }
+
+      if (!tableInfo) {
+        state.related.errors.push(
+          `Missing table: ${configuredName}${Number.isInteger(expectedId) ? ` (expected ID ${expectedId})` : ""}`
+        );
         continue;
       }
 
-      const table = new FeatureLayer({
-        url: `${serviceRoot}/${tableInfo.id}`,
-        title: tableInfo.name,
-        outFields: ["*"]
-      });
-      await table.load();
-      state.related.tables[key] = table;
-      state.related.tableMetadata[key] = { id: tableInfo.id, name: tableInfo.name };
+      try {
+        const table = new FeatureLayer({
+          url: `${serviceRoot}/${tableInfo.id}`,
+          title: tableInfo.name,
+          outFields: ["*"]
+        });
+        await table.load();
+        state.related.tables[key] = table;
+        state.related.tableMetadata[key] = {
+          id: tableInfo.id,
+          name: tableInfo.name,
+          configuredName,
+          url: table.url,
+          canAdd: table.capabilities?.operations?.supportsAdd !== false,
+          canUpdate: table.capabilities?.operations?.supportsUpdate !== false,
+          canDelete: table.capabilities?.operations?.supportsDelete === true
+        };
+      } catch (tableError) {
+        console.error(`Related table '${configuredName}' could not be loaded.`, tableError);
+        state.related.errors.push(`${configuredName}: ${safeText(tableError.message, "load failed")}`);
+      }
     }
 
     const loadedKeys = Object.keys(state.related.tables);
-    state.related.available = loadedKeys.length > 0;
     const expectedCount = Object.keys(configuredNames).length;
-    const status = loadedKeys.length === expectedCount ? "Connected" : `Partial (${loadedKeys.length}/${expectedCount})`;
+    state.related.available = loadedKeys.length > 0;
+
+    const mapping = Object.entries(state.related.tableMetadata).map(([key, info]) => ({
+      key,
+      id: info.id,
+      name: info.name,
+      url: info.url,
+      canAdd: info.canAdd,
+      canUpdate: info.canUpdate
+    }));
+    console.info("Related-table mapping", mapping);
+
+    const status = loadedKeys.length === expectedCount
+      ? `Connected (${loadedKeys.length}/${expectedCount})`
+      : loadedKeys.length
+        ? `Partial (${loadedKeys.length}/${expectedCount})`
+        : "Unavailable";
     const detail = state.related.errors.length
-      ? `Connected to ${loadedKeys.length} related tables. ${state.related.errors.join("; ")}.`
-      : `Connected to ${loadedKeys.length} related tables in ${serviceRoot}.`;
+      ? `FeatureServer: ${serviceRoot}. ${state.related.errors.join("; ")}.`
+      : `FeatureServer: ${serviceRoot}. Tables: ${mapping.map((item) => `${item.name} [${item.id}]`).join(", ")}.`;
     setRelatedDataStatus(status, detail);
     return state.related.available;
   } catch (error) {
@@ -1575,15 +1629,34 @@ function preferredToRelatedAttributes(unit) {
   return attrs;
 }
 
-function ensureRelatedEditAllowed(key) {
+function ensureRelatedEditAllowed(key, operation = "add") {
   const config = getRelatedDataConfig();
+  if (!config.enabled) {
+    throw new Error("Related-table storage is disabled in config.js.");
+  }
+  if (!state.related.initialized || !state.related.available) {
+    const detail = state.related.errors.length ? ` ${state.related.errors.join("; ")}.` : "";
+    throw new Error(`Related-table storage is not connected.${detail} Open the Account dialog and verify a 7/7 connection before saving.`);
+  }
+
   const table = relatedTable(key);
-  if (!table) throw new Error(`Related table '${key}' is not available in the published feature service.`);
+  const configuredName = config.tableNames?.[key] || key;
+  if (!table) {
+    throw new Error(`Required related table '${configuredName}' is not available in ${state.related.serviceRoot || "the configured FeatureServer"}.`);
+  }
   if (config.requireOAuthForEdits !== false && state.authMode !== "oauth") {
     throw new Error("Related-table edits require ArcGIS OAuth user authentication.");
   }
   if (config.requireOAuthForEdits !== false && !state.credential) {
     throw new Error("Sign in with an authorized California State Parks ArcGIS Online account before editing related records.");
+  }
+
+  const operations = table.capabilities?.operations || {};
+  if (operation === "add" && operations.supportsAdd === false) {
+    throw new Error(`${table.title} does not permit adding records for the signed-in user.`);
+  }
+  if (operation === "update" && operations.supportsUpdate === false) {
+    throw new Error(`${table.title} does not permit updating records for the signed-in user.`);
   }
   return table;
 }
@@ -1600,42 +1673,66 @@ function attributesForRelatedTable(table, attributes) {
 }
 
 async function applyRelatedRecord(key, attributes, identity = null) {
-  const table = ensureRelatedEditAllowed(key);
+  const isUpdate = identity?.objectId != null;
+  const table = ensureRelatedEditAllowed(key, isUpdate ? "update" : "add");
   const { Graphic } = state.modules;
   const attrs = attributesForRelatedTable(table, attributes);
-  const isUpdate = identity?.objectId != null;
   if (isUpdate) attrs[table.objectIdField] = identity.objectId;
+
   const graphic = new Graphic({ attributes: attrs });
-  const result = await table.applyEdits(isUpdate ? { updateFeatures: [graphic] } : { addFeatures: [graphic] });
+  const result = await table.applyEdits(
+    isUpdate ? { updateFeatures: [graphic] } : { addFeatures: [graphic] }
+  );
   const editResult = isUpdate ? result.updateFeatureResults?.[0] : result.addFeatureResults?.[0];
-  if (!editResult || editResult.error) throw new Error(editResult?.error?.message || `ArcGIS rejected the ${key} edit.`);
-  const objectId = editResult.objectId ?? identity?.objectId ?? null;
-  let globalId = editResult.globalId ?? identity?.globalId ?? null;
-  if (!globalId && objectId != null) {
-    const query = table.createQuery();
-    query.objectIds = [objectId];
-    query.outFields = [table.globalIdField || "GlobalID"];
-    query.returnGeometry = false;
-    const queryResult = await table.queryFeatures(query);
-    globalId = queryResult.features?.[0]?.attributes?.[table.globalIdField || "GlobalID"] || null;
+  if (!editResult || editResult.error) {
+    const details = editResult?.error?.details?.length ? ` ${editResult.error.details.join("; ")}` : "";
+    throw new Error(`${editResult?.error?.message || `ArcGIS rejected the ${key} edit.`}${details}`);
   }
-  return { objectId, globalId };
+
+  const objectId = editResult.objectId ?? identity?.objectId ?? null;
+  if (objectId == null) throw new Error(`${table.title} returned no ObjectID after the edit.`);
+
+  // Verify the record from the service before reporting success. This prevents
+  // the UI from showing a record that only exists in browser memory.
+  const query = table.createQuery();
+  query.objectIds = [objectId];
+  query.outFields = ["*"];
+  query.returnGeometry = false;
+  const queryResult = await table.queryFeatures(query);
+  const savedFeature = queryResult.features?.[0];
+  if (!savedFeature) {
+    throw new Error(`${table.title} reported a successful edit, but the saved record could not be read back from ArcGIS Online.`);
+  }
+
+  const globalIdField = table.globalIdField || "GlobalID";
+  const globalId = savedFeature.attributes?.[globalIdField]
+    ?? editResult.globalId
+    ?? identity?.globalId
+    ?? null;
+  return { objectId, globalId, attributes: savedFeature.attributes || {} };
 }
 
 async function applyRelatedAdds(key, attributeRows) {
-  const table = ensureRelatedEditAllowed(key);
+  const table = ensureRelatedEditAllowed(key, "add");
   const { Graphic } = state.modules;
   if (!attributeRows.length) return [];
   const addFeatures = attributeRows.map((attributes) => new Graphic({ attributes: attributesForRelatedTable(table, attributes) }));
   const result = await table.applyEdits({ addFeatures });
   const editResults = result.addFeatureResults || [];
   const error = editResults.find((item) => item.error)?.error;
-  if (error) throw new Error(error.message || `ArcGIS rejected one or more ${key} records.`);
+  if (error) {
+    const details = error.details?.length ? ` ${error.details.join("; ")}` : "";
+    throw new Error(`${error.message || `ArcGIS rejected one or more ${key} records.`}${details}`);
+  }
+  if (editResults.length !== attributeRows.length) {
+    throw new Error(`${table.title} saved ${editResults.length} of ${attributeRows.length} expected records.`);
+  }
   return editResults;
 }
 
 async function savePreferredConditionsRelated(unit) {
-  if (!state.related.available || !unit.sourceGlobalId) return;
+  if (!unit.sourceGlobalId) throw new Error("The selected burn unit does not have a GlobalID for the weather-prescription relationship.");
+  ensureRelatedEditAllowed("weatherPrescriptions", unit.related?.weatherPrescription?.objectId != null ? "update" : "add");
   const identity = unit.related?.weatherPrescription || null;
   const saved = await applyRelatedRecord("weatherPrescriptions", preferredToRelatedAttributes(unit), identity);
   unit.related = unit.related || {};
@@ -1692,7 +1789,9 @@ function scoreForecastPeriodDetails(period, preferred) {
 }
 
 async function persistForecastRun(unit, payload) {
-  if (!state.related.available || !unit.sourceGlobalId) return;
+  if (!unit.sourceGlobalId) throw new Error("The selected burn unit does not have a GlobalID for the forecast relationship.");
+  ensureRelatedEditAllowed("forecastRuns", "add");
+  ensureRelatedEditAllowed("forecastPeriods", "add");
   const pointProperties = payload.pointData?.properties || {};
   const prescriptionGuid = unit.related?.weatherPrescription?.globalId || null;
   const run = await applyRelatedRecord("forecastRuns", {
@@ -1806,7 +1905,8 @@ function hasActualWeatherValues(record) {
 }
 
 async function persistBurnEvent(unit, record) {
-  if (!state.related.available || !unit.sourceGlobalId) return;
+  if (!unit.sourceGlobalId) throw new Error("The selected burn unit does not have a GlobalID for the burn-event relationship.");
+  ensureRelatedEditAllowed("burnEvents", record.sourceObjectId != null ? "update" : "add");
   const eventIdentity = record.sourceObjectId != null
     ? { objectId: record.sourceObjectId, globalId: record.sourceGlobalId }
     : null;
@@ -1830,7 +1930,8 @@ async function persistBurnEvent(unit, record) {
 }
 
 async function persistSubscriber(unit, subscriber) {
-  if (!state.related.available || !unit.sourceGlobalId) return;
+  if (!unit.sourceGlobalId) throw new Error("The selected burn unit does not have a GlobalID for the notification relationship.");
+  ensureRelatedEditAllowed("notificationSubscriptions", subscriber.sourceObjectId != null ? "update" : "add");
   const identity = subscriber.sourceObjectId != null
     ? { objectId: subscriber.sourceObjectId, globalId: subscriber.sourceGlobalId }
     : null;
@@ -1857,7 +1958,8 @@ async function persistSubscriber(unit, subscriber) {
 }
 
 async function deactivateSubscriber(unit, subscriber) {
-  if (!state.related.available || subscriber.sourceObjectId == null) return;
+  if (subscriber.sourceObjectId == null) return;
+  ensureRelatedEditAllowed("notificationSubscriptions", "update");
   await applyRelatedRecord("notificationSubscriptions", {
     IS_ACTIVE: 0,
     DELIVERY_ENABLED: 0,
@@ -1866,8 +1968,8 @@ async function deactivateSubscriber(unit, subscriber) {
 }
 
 async function persistNotificationToggle(unit) {
-  const table = relatedTable("notificationSubscriptions");
-  if (!state.related.available || !table || !unit.subscribers.length) return;
+  if (!unit.subscribers.length) return;
+  const table = ensureRelatedEditAllowed("notificationSubscriptions", "update");
   for (const subscriber of unit.subscribers) {
     if (subscriber.sourceObjectId == null) continue;
     await applyRelatedRecord("notificationSubscriptions", {
@@ -2022,7 +2124,7 @@ async function buildFireEffectsReportExport() {
   return {
     schema: "CVD Prescribed Fire fire-effects report data v1",
     generatedUtc: new Date().toISOString(),
-    applicationVersion: "3.8",
+    applicationVersion: "3.9",
     sourceFeatureService: state.related.serviceRoot || featureServiceRootFromUrl(state.sourceLayer?.url),
     burnUnitCount: burnUnits.length,
     notificationDataIncluded: includeNotifications,
@@ -3779,7 +3881,9 @@ async function handleConditionsFormSubmit(event) {
     announce("Preferred weather conditions saved to the related prescription table.");
   } catch (error) {
     console.error("Preferred weather conditions could not be saved.", error);
-    announce(`Preferred conditions were not saved. ${safeText(error.message, "Check related-table editing permissions.")}`);
+    const message = `Preferred conditions were not saved. ${safeText(error.message, "Check related-table editing permissions.")}`;
+    announce(message);
+    window.alert(message);
   }
 }
 
@@ -3839,7 +3943,9 @@ async function handleEventFormSubmit(event) {
     announce("Burn event and actual weather saved to related tables.");
   } catch (error) {
     console.error("Burn event could not be saved.", error);
-    announce(`Burn event was not saved. ${safeText(error.message, "Check related-table editing permissions.")}`);
+    const message = `Burn event was not saved. ${safeText(error.message, "Check related-table editing permissions.")}`;
+    announce(message);
+    window.alert(message);
   }
 }
 

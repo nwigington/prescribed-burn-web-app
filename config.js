@@ -82,14 +82,28 @@ window.APP_CONFIG = {
     serviceRoot: "",
     requireOAuthForEdits: true,
     loadLatestForecastScoresOnStart: true,
+    // ArcGIS Online publishes the file-geodatabase table names as the
+    // following service display names. v3.9 also normalizes spaces,
+    // underscores, punctuation, and case when discovering the tables.
     tableNames: {
-      weatherPrescriptions: "Preferred_Weather_Prescriptions",
-      forecastRuns: "Forecast_Runs",
-      forecastPeriods: "Forecast_Periods_and_Scores",
-      burnEvents: "Burn_Events",
-      actualWeather: "Actual_Weather_and_Fire_Behavior",
-      notificationSubscriptions: "Notification_Subscriptions",
-      notificationDeliveries: "Notification_Delivery_Log"
+      weatherPrescriptions: "Preferred Weather Prescriptions",
+      forecastRuns: "Forecast Runs",
+      forecastPeriods: "Forecast Periods and Scores",
+      burnEvents: "Burn Events",
+      actualWeather: "Actual Weather and Fire Behavior",
+      notificationSubscriptions: "Notification Subscriptions",
+      notificationDeliveries: "Notification Delivery Log"
+    },
+    // Stable IDs found in the supplied staging-service metadata. These are
+    // used as a fallback when a publisher later changes a display name.
+    tableIds: {
+      weatherPrescriptions: 10,
+      forecastRuns: 20,
+      forecastPeriods: 21,
+      burnEvents: 30,
+      actualWeather: 31,
+      notificationSubscriptions: 40,
+      notificationDeliveries: 41
     },
     export: {
       filePrefix: "CVD_PrescribedFire_FireEffects_ReportData",

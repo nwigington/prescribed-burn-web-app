@@ -1,4 +1,4 @@
-# ArcGIS Online Authorized-User and Related-Table Setup — Version 3.8
+# ArcGIS Online Authorized-User and Related-Table Setup — Version 3.9
 
 ## 1. Authentication
 
@@ -19,7 +19,7 @@ Register the final HTTPS application URL and exact OAuth redirect URL(s) in ArcG
 
 ## 2. Authoritative feature service
 
-Version 3.8 expects `RxBurns_Poly` and the seven related tables to be published in the same FeatureServer. The supplied file geodatabase used these exact table names:
+Version 3.9 expects `RxBurns_Poly` and the seven related tables to be published in the same FeatureServer. The supplied file geodatabase used these exact table names:
 
 - `Preferred_Weather_Prescriptions`
 - `Forecast_Runs`
@@ -41,7 +41,7 @@ prescribedBurns: {
 }
 ```
 
-The supplied FGDB parent field is `END_DATE`, so Version 3.8 uses that field as the end-date mapping.
+The supplied FGDB parent field is `END_DATE`, so Version 3.9 uses that field as the end-date mapping.
 
 ## 3. Related-table configuration
 
@@ -67,7 +67,7 @@ relatedData: {
 }
 ```
 
-Leave `serviceRoot` blank when the tables are in the same FeatureServer as `RxBurns_Poly`. Version 3.8 derives the service root and discovers numeric table IDs by exact table name, so publishing does not require hard-coded table IDs.
+Leave `serviceRoot` blank when the tables are in the same FeatureServer as `RxBurns_Poly`. Version 3.9 derives the service root and discovers numeric table IDs by exact table name, so publishing does not require hard-coded table IDs.
 
 ## 4. Required relationships
 
@@ -114,4 +114,23 @@ The Burn List **Download report data** button reads the current source layer and
 
 ## 9. Schema note
 
-The supplied `Actual_Weather_and_Fire_Behavior` table lacks a dedicated probability-of-precipitation field. Version 3.8 places an entered POP value into `OBS_NOTES`. Add `POP_PCT` later if independent querying/reporting is needed.
+The supplied `Actual_Weather_and_Fire_Behavior` table lacks a dedicated probability-of-precipitation field. Version 3.9 places an entered POP value into `OBS_NOTES`. Add `POP_PCT` later if independent querying/reporting is needed.
+
+
+## Version 3.9 published table-name verification
+
+The supplied staging geodatabase metadata shows the published `CVD_PrescribedFire_StagingMap` FeatureServer using these service table names and IDs:
+
+| ID | Published table name | File-geodatabase dataset |
+|---:|---|---|
+| 10 | Preferred Weather Prescriptions | Preferred_Weather_Prescriptions |
+| 20 | Forecast Runs | Forecast_Runs |
+| 21 | Forecast Periods and Scores | Forecast_Periods_and_Scores |
+| 30 | Burn Events | Burn_Events |
+| 31 | Actual Weather and Fire Behavior | Actual_Weather_and_Fire_Behavior |
+| 40 | Notification Subscriptions | Notification_Subscriptions |
+| 41 | Notification Delivery Log | Notification_Delivery_Log |
+
+Version 3.9 resolves tables by stable ID first and normalized name second. Do not change these IDs during an overwrite.
+
+Before entering records, open the application Account dialog and confirm **Related data: Connected (7/7)**. If the status is Partial or Unavailable, do not continue data entry; review the status detail and browser console. A save operation now fails visibly instead of falling back to browser-only state.
