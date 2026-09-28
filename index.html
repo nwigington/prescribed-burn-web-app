@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Prescribed Fire Operations Hub</title>
 
-    <script src="./config.js?v=3.9"></script>
+    <script src="./config.js?v=3.10"></script>
     <script>
       const authConfig = window.APP_CONFIG.authentication || {};
       const oauthConfigured =
@@ -29,7 +29,7 @@
       };
     </script>
     <script type="module" src="https://js.arcgis.com/5.1/"></script>
-    <link rel="stylesheet" href="./styles.css?v=3.9" />
+    <link rel="stylesheet" href="./styles.css?v=3.10" />
   </head>
 
   <body class="calcite-mode-dark">
@@ -505,8 +505,118 @@
           <div class="field-group"><label for="treatmentType">RX Fire Treatment Type <span aria-hidden="true">*</span></label><select id="treatmentType" required><option value="">Select Treatment</option><option>Broadcast Burn</option><option>Machine Pile Burn</option><option>Hand Pile Burn</option></select></div>
           <div class="field-group"><label for="plannedAcres">Planned Acres <span aria-hidden="true">*</span></label><input id="plannedAcres" type="number" min="0" step="0.01" required /></div>
           <div class="field-group"><label for="actualAcres">Actual Acres Burned</label><input id="actualAcres" type="number" min="0" step="0.01" /></div>
-          <div class="field-group field-group--wide"><label for="eventNotes">Burn Event Notes</label><textarea id="eventNotes" rows="4" placeholder="Ignition technique, weather and smoke conditions, intensity, coverage, effectiveness, and follow-up needs"></textarea></div>
-          <fieldset class="field-group field-group--wide"><legend>Actual Weather Conditions</legend><div id="actualWeatherFields" class="conditions-grid conditions-grid--nested"></div></fieldset>
+          <fieldset class="field-group field-group--wide">
+  <legend>Operations and Authorization</legend>
+
+  <div class="form-grid">
+
+    <div class="field-group">
+      <label for="eventBurnBoss">Burn Boss</label>
+      <input
+        id="eventBurnBoss"
+        type="text"
+        maxlength="100"
+        autocomplete="off"
+      />
+    </div>
+
+    <div class="field-group">
+      <label for="eventPermitRef">Permit / Authorization</label>
+      <input
+        id="eventPermitRef"
+        type="text"
+        maxlength="100"
+        placeholder="Permit, smoke authorization, or approval reference"
+      />
+    </div>
+
+    <div class="field-group">
+      <label for="eventSpotForecastId">NWS Spot Forecast ID</label>
+      <input
+        id="eventSpotForecastId"
+        type="text"
+        inputmode="numeric"
+        maxlength="50"
+        placeholder="Example: 2600999"
+      />
+    </div>
+
+    <div class="field-group">
+      <label for="eventSpotForecastUrl">NWS Spot Forecast URL</label>
+      <input
+        id="eventSpotForecastUrl"
+        type="url"
+        maxlength="500"
+        placeholder="https://spot.weather.gov/forecasts/..."
+      />
+    </div>
+
+    <p class="panel-help field-group--wide">
+      After NWS creates the Spot Forecast, paste its forecast URL here. The application will extract the numeric Spot Forecast ID automatically. If you enter only the numeric ID, the forecast URL will be created automatically when the event is saved.
+    </p>
+
+  </div>
+</fieldset>
+
+<fieldset class="field-group field-group--wide">
+  <legend>Burn Results and Effectiveness</legend>
+
+  <div class="form-grid">
+
+    <div class="field-group">
+      <label for="eventIntensityClass">Fire Intensity</label>
+      <select id="eventIntensityClass">
+        <option value="">Not entered</option>
+      </select>
+    </div>
+
+    <div class="field-group">
+      <label for="eventCoveragePct">Burn Coverage (%)</label>
+      <input
+        id="eventCoveragePct"
+        type="number"
+        min="0"
+        max="100"
+        step="0.1"
+      />
+    </div>
+
+    <div class="field-group field-group--wide">
+      <label for="eventEffectiveness">
+        Effectiveness / Objectives Met
+      </label>
+      <textarea
+        id="eventEffectiveness"
+        rows="3"
+        maxlength="1000"
+        placeholder="Describe how well the treatment met the burn objectives"
+      ></textarea>
+    </div>
+
+    <div class="field-group field-group--wide">
+      <label for="eventFollowUp">Follow-Up Needs</label>
+      <textarea
+        id="eventFollowUp"
+        rows="3"
+        maxlength="1000"
+        placeholder="Additional burning, monitoring, invasive treatment, rehabilitation, etc."
+      ></textarea>
+    </div>
+
+    <div class="field-group field-group--wide">
+      <label for="eventSmokeNotes">Smoke Conditions and Impacts</label>
+      <textarea
+        id="eventSmokeNotes"
+        rows="3"
+        maxlength="1000"
+        placeholder="Smoke dispersion, visibility, sensitive receptors, road impacts, complaints, or mitigation actions"
+      ></textarea>
+    </div>
+
+  </div>
+</fieldset>
+          <div class="field-group field-group--wide"><label for="eventNotes">Burn Event Notes</label><textarea id="eventNotes" rows="4" maxlength="2000" placeholder="Enter any additional operational notes not captured above."></textarea></div>
+          <fieldset class="field-group field-group--wide"><legend>Actual Weather and Fire Behavior</legend><div id="actualWeatherFields" class="conditions-grid conditions-grid--nested"></div></fieldset>
         </div>
         <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="eventDialog">Cancel</button><button class="primary-button" type="submit">Save Burn Event</button></div>
       </form>
@@ -543,6 +653,6 @@
       </div>
     </dialog>
 
-    <script type="module" src="./app.js?v=3.9"></script>
+    <script type="module" src="./app.js?v=3.10"></script>
   </body>
 </html>

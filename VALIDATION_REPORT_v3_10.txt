@@ -1,0 +1,11 @@
+CVD Prescribed Fire GIS Hub v3.10 Validation Report
+====================================================
+Duplicate HTML IDs: 0
+Missing label targets: 0
+Missing aria-controls targets: 0
+Missing cached DOM references: 0
+CSS braces balanced: True (368/368)
+Missing required related-table field mappings: None
+Asset versions set to 3.10: True
+config.js unchanged from v3.9: True
+styles.css unchanged from v3.9: True

@@ -22,18 +22,43 @@ const CONDITION_DEFINITIONS = [
 ];
 
 const ACTUAL_WEATHER_FIELDS = [
-  ["temperature", "Temperature (°F)"],
-  ["relativeHumidity", "Relative humidity (%)"],
-  ["windSpeed", "Wind speed (mph)"],
-  ["windDirection", "Wind direction"],
-  ["windGust", "Wind gust (mph)"],
-  ["quantitativePrecipitation", "Quantitative precipitation (in)"],
-  ["probabilityPrecipitation", "Probability of precipitation (%)"],
-  ["transportWindSpeed", "Transport wind speed (mph)"],
-  ["transportWindDirection", "Transport wind direction"],
-  ["dispersionIndex", "Dispersion index"],
-  ["mixingHeight", "Mixing height (ft)"],
-  ["lvori", "LVORI"]
+  { key: "temperature", label: "Temperature (°F)", type: "number", step: "any" },
+  { key: "relativeHumidity", label: "Relative humidity (%)", type: "number", min: 0, max: 100, step: "0.1" },
+  { key: "windSpeed", label: "Wind speed (mph)", type: "number", min: 0, step: "0.1" },
+  { key: "windDirection", label: "Wind direction", type: "direction", arcgisField: "WIND_DIR" },
+  { key: "windGust", label: "Wind gust (mph)", type: "number", min: 0, step: "0.1" },
+  { key: "quantitativePrecipitation", label: "Quantitative precipitation (in)", type: "number", min: 0, step: "0.01" },
+  { key: "probabilityPrecipitation", label: "Probability of precipitation (%)", type: "number", min: 0, max: 100, step: "1" },
+  { key: "transportWindSpeed", label: "Transport wind speed (mph)", type: "number", min: 0, step: "0.1" },
+  { key: "transportWindDirection", label: "Transport wind direction", type: "direction", arcgisField: "TRANS_WIND_DIR" },
+  { key: "dispersionIndex", label: "Dispersion index", type: "number", step: "0.1" },
+  { key: "mixingHeight", label: "Mixing height (ft)", type: "number", min: 0, step: "1" },
+  { key: "lvori", label: "LVORI", type: "number", min: 0, step: "0.1" },
+  { key: "flameLength", label: "Flame length (ft)", type: "number", min: 0, step: "0.1" },
+  { key: "rateOfSpread", label: "Rate of spread (ft/min)", type: "number", min: 0, step: "0.1" },
+  { key: "smokeDirection", label: "Observed smoke direction", type: "direction", arcgisField: "SMOKE_DIR" },
+  { key: "smokeBehavior", label: "Smoke behavior / observations", type: "textarea", rows: 3, maxLength: 1000, wide: true },
+  { key: "observationNotes", label: "Observation notes", type: "textarea", rows: 3, maxLength: 1800, wide: true }
+];
+
+const FALLBACK_DIRECTION_OPTIONS = [
+  { code: "N", name: "North" },
+  { code: "NE", name: "Northeast" },
+  { code: "E", name: "East" },
+  { code: "SE", name: "Southeast" },
+  { code: "S", name: "South" },
+  { code: "SW", name: "Southwest" },
+  { code: "W", name: "West" },
+  { code: "NW", name: "Northwest" },
+  { code: "CALM", name: "Calm" },
+  { code: "VRB", name: "Variable" }
+];
+
+const FALLBACK_INTENSITY_OPTIONS = [
+  { code: "LOW", name: "Low" },
+  { code: "MODERATE", name: "Moderate" },
+  { code: "HIGH", name: "High" },
+  { code: "EXTREME", name: "Extreme" }
 ];
 
 
@@ -454,10 +479,13 @@ function cacheDom() {
     "unitFuel", "unitIgnition", "unitObjective", "unitNotes", "conditionsDialog",
     "conditionsForm", "conditionsFields", "eventDialog", "eventForm", "eventDialogTitle", "eventId",
     "plannedBurnDate", "actualBurnDate", "burnCanceled", "treatmentType", "plannedAcres",
-    "actualAcres", "eventNotes", "actualWeatherFields", "confirmDialog", "confirmTitle",
-    "confirmMessage", "confirmCancel", "confirmAction", "liveRegion", "spotForecastDashboardLink",
-    "nwsFireWeatherLink", "watchDutyLink", "burnProLink", "spotForecastUnitLink", "pointForecastLink",
-    "fireWeatherDashboardUnitLink", "spotForecastPlannerLink", "forecastOfficeLink", "accountDialog", "accountStatus", "accountUser", "relatedDataStatus", "relatedDataDetail", "downloadReportDataButton", "arcgisSignInButton", "logoutButton"
+    "actualAcres", "eventBurnBoss", "eventPermitRef", "eventSpotForecastId", "eventSpotForecastUrl",
+    "eventIntensityClass", "eventCoveragePct", "eventEffectiveness", "eventFollowUp", "eventSmokeNotes",
+    "eventNotes", "actualWeatherFields", "confirmDialog", "confirmTitle", "confirmMessage", "confirmCancel",
+    "confirmAction", "liveRegion", "spotForecastDashboardLink", "nwsFireWeatherLink", "watchDutyLink",
+    "burnProLink", "spotForecastUnitLink", "pointForecastLink", "fireWeatherDashboardUnitLink",
+    "spotForecastPlannerLink", "forecastOfficeLink", "accountDialog", "accountStatus", "accountUser",
+    "relatedDataStatus", "relatedDataDetail", "downloadReportDataButton", "arcgisSignInButton", "logoutButton"
   ];
 
   for (const id of ids) dom[id] = document.getElementById(id);
@@ -1513,21 +1541,17 @@ function eventFromRelatedFeature(table, feature, weatherByEvent) {
     treatmentType: treatmentTypeName(a.TREATMENT_TYPE),
     plannedAcres: toNullableNumber(a.PLANNED_ACRES),
     actualAcres: toNullableNumber(a.ACTUAL_ACRES),
+    burnBoss: a.BURN_BOSS || "",
+    permitRef: a.PERMIT_REF || "",
+    spotForecastId: a.SPOT_FORECAST_ID || "",
+    spotForecastUrl: a.SPOT_FORECAST_URL || "",
+    intensityClass: a.INTENSITY_CLASS || "",
+    coveragePct: toNullableNumber(a.COVERAGE_PCT),
+    effectiveness: a.EFFECTIVENESS || "",
+    followUp: a.FOLLOW_UP || "",
+    smokeNotes: a.SMOKE_NOTES || "",
     notes: a.EVENT_NOTES || "",
-    actualWeather: {
-      temperature: nullableString(w.TEMP_F),
-      relativeHumidity: nullableString(w.RH_PCT),
-      windSpeed: nullableString(w.WIND_MPH),
-      windDirection: w.WIND_DIR || "",
-      windGust: nullableString(w.GUST_MPH),
-      quantitativePrecipitation: nullableString(w.QPF_IN),
-      probabilityPrecipitation: "",
-      transportWindSpeed: nullableString(w.TRANS_WIND_MPH),
-      transportWindDirection: w.TRANS_WIND_DIR || "",
-      dispersionIndex: nullableString(w.DI_VALUE),
-      mixingHeight: nullableString(w.MIX_HT_FT),
-      lvori: nullableString(w.LVORI_VALUE)
-    }
+    actualWeather: actualWeatherFromRelatedAttributes(w)
   };
 }
 
@@ -1567,6 +1591,40 @@ function relatedRecordIdentity(table, feature) {
 
 function nullableString(value) {
   return value == null ? "" : String(value);
+}
+
+function parseProbabilityPrecipitationFromNotes(value) {
+  const text = String(value || "");
+  const match = text.match(
+    /Probability of precipitation entered in the web app:\s*([0-9]+(?:\.[0-9]+)?)%\.?(?:\s*The provided Actual_Weather_and_Fire_Behavior schema does not include a POP_PCT field\.)?/i
+  );
+  return {
+    probabilityPrecipitation: match?.[1] || "",
+    observationNotes: match ? text.replace(match[0], "").trim() : text.trim()
+  };
+}
+
+function actualWeatherFromRelatedAttributes(attributes = {}) {
+  const parsedNotes = parseProbabilityPrecipitationFromNotes(attributes.OBS_NOTES);
+  return {
+    temperature: nullableString(attributes.TEMP_F),
+    relativeHumidity: nullableString(attributes.RH_PCT),
+    windSpeed: nullableString(attributes.WIND_MPH),
+    windDirection: attributes.WIND_DIR || "",
+    windGust: nullableString(attributes.GUST_MPH),
+    quantitativePrecipitation: nullableString(attributes.QPF_IN),
+    probabilityPrecipitation: parsedNotes.probabilityPrecipitation,
+    transportWindSpeed: nullableString(attributes.TRANS_WIND_MPH),
+    transportWindDirection: attributes.TRANS_WIND_DIR || "",
+    dispersionIndex: nullableString(attributes.DI_VALUE),
+    mixingHeight: nullableString(attributes.MIX_HT_FT),
+    lvori: nullableString(attributes.LVORI_VALUE),
+    flameLength: nullableString(attributes.FLAME_LENGTH_FT),
+    rateOfSpread: nullableString(attributes.ROS_FT_MIN),
+    smokeDirection: attributes.SMOKE_DIR || "",
+    smokeBehavior: attributes.SMOKE_BEHAVIOR || "",
+    observationNotes: parsedNotes.observationNotes
+  };
 }
 
 function toDateInputValue(value) {
@@ -1869,10 +1927,49 @@ function burnEventToRelatedAttributes(unit, record) {
     TREATMENT_TYPE: treatmentTypeCode(record.treatmentType),
     PLANNED_ACRES: record.plannedAcres,
     ACTUAL_ACRES: record.actualAcres,
+    BURN_BOSS: record.burnBoss || null,
     IGNITION_METHOD: unit.sourceValues?.ignitionMethod ?? unit.ignitionMethod,
-    SPOT_FORECAST_URL: CONFIG.externalLinks?.nwsSpotForecastRequest || null,
+    SPOT_FORECAST_ID: record.spotForecastId || null,
+    SPOT_FORECAST_URL: record.spotForecastUrl || null,
+    PERMIT_REF: record.permitRef || null,
+    INTENSITY_CLASS: record.intensityClass || null,
+    COVERAGE_PCT: record.coveragePct,
+    EFFECTIVENESS: record.effectiveness || null,
+    FOLLOW_UP: record.followUp || null,
+    SMOKE_NOTES: record.smokeNotes || null,
     EVENT_NOTES: record.notes || null
   };
+}
+
+function spotForecastIdFromUrl(url) {
+  const match = String(url || "") 
+  .trim() 
+  .match(/spot\.weather\.gov\/forecasts\/(\d+)/i);
+  return match?.[1] || "";
+}
+
+function spotForecastUrlFromId(id) {
+  const value = String(id || "").trim();
+  if (!/^\d+$/.test(value)) {
+    return "";
+  }
+  return `https://spot.weather.gov/forecasts/${value}`;
+}
+
+function actualWeatherObservationNotes(actualWeather = {}) {
+  const parts = [];
+  const userNotes = String(actualWeather.observationNotes || "").trim();
+  if (userNotes) parts.push(userNotes);
+
+  const probability = String(actualWeather.probabilityPrecipitation || "").trim();
+  if (probability) {
+    parts.push(
+      `Probability of precipitation entered in the web app: ${probability}%. ` +
+      "The provided Actual_Weather_and_Fire_Behavior schema does not include a POP_PCT field."
+    );
+  }
+
+  return parts.length ? parts.join("\n\n") : null;
 }
 
 function actualWeatherToRelatedAttributes(unit, record, burnEventGuid) {
@@ -1894,9 +1991,11 @@ function actualWeatherToRelatedAttributes(unit, record, burnEventGuid) {
     MIX_HT_FT: toNullableNumber(w.mixingHeight),
     DI_VALUE: toNullableNumber(w.dispersionIndex),
     LVORI_VALUE: toNullableNumber(w.lvori),
-    OBS_NOTES: w.probabilityPrecipitation
-      ? `Probability of precipitation entered in the web app: ${w.probabilityPrecipitation}%. The provided Actual_Weather_and_Fire_Behavior schema does not include a POP_PCT field.`
-      : null
+    FLAME_LENGTH_FT: toNullableNumber(w.flameLength),
+    ROS_FT_MIN: toNullableNumber(w.rateOfSpread),
+    SMOKE_DIR: w.smokeDirection || null,
+    SMOKE_BEHAVIOR: String(w.smokeBehavior || "").trim() || null,
+    OBS_NOTES: actualWeatherObservationNotes(w)
   };
 }
 
@@ -2245,6 +2344,72 @@ function codedDomainOptionsForField(layer, field) {
       return true;
     })
     .map((entry) => ({ code: entry.code, name: String(entry.name) }));
+}
+
+function relatedDomainOptions(tableKey, fieldName) {
+  const table = relatedTable(tableKey);
+  if (!table) return [];
+  const requested = normalizeFieldToken(fieldName);
+  const field = (table.fields || []).find((item) =>
+    normalizeFieldToken(item.name) === requested ||
+    normalizeFieldToken(item.alias) === requested
+  );
+  return codedDomainOptionsForField(table, field);
+}
+
+function setSelectDomainOptions(select, options, placeholder = "Not entered") {
+  if (!select) return;
+  const currentValue = select.value;
+  select.replaceChildren();
+
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = placeholder;
+  select.append(blank);
+
+  for (const optionInfo of options || []) {
+    const option = document.createElement("option");
+    option.value = String(optionInfo.code);
+    option.textContent = optionInfo.name;
+    select.append(option);
+  }
+
+  const hasCurrentValue = Array.from(select.options)
+    .some((option) => option.value === String(currentValue));
+  if (hasCurrentValue) select.value = String(currentValue);
+}
+
+function populateRelatedDomainSelect(select, tableKey, fieldName, placeholder, fallbackOptions = []) {
+  const options = relatedDomainOptions(tableKey, fieldName);
+  setSelectDomainOptions(
+    select,
+    options.length ? options : fallbackOptions,
+    placeholder
+  );
+}
+
+function refreshActualWeatherDirectionOptions() {
+  for (const definition of ACTUAL_WEATHER_FIELDS.filter((item) => item.type === "direction")) {
+    const select = document.getElementById(`actual-${definition.key}`);
+    if (!select) continue;
+    const options = relatedDomainOptions("actualWeather", definition.arcgisField);
+    setSelectDomainOptions(
+      select,
+      options.length ? options : FALLBACK_DIRECTION_OPTIONS,
+      "Not entered"
+    );
+  }
+}
+
+function refreshBurnEventDomainControls() {
+  populateRelatedDomainSelect(
+    dom.eventIntensityClass,
+    "burnEvents",
+    "INTENSITY_CLASS",
+    "Not entered",
+    FALLBACK_INTENSITY_OPTIONS
+  );
+  refreshActualWeatherDirectionOptions();
 }
 
 function applySchemaLabels() {
@@ -3372,6 +3537,20 @@ function initializeFormsAndControls() {
   dom.unitForm.addEventListener("submit", handleUnitFormSubmit);
   dom.conditionsForm.addEventListener("submit", handleConditionsFormSubmit);
   dom.eventForm.addEventListener("submit", handleEventFormSubmit);
+
+  dom.eventSpotForecastUrl.addEventListener("change", () => {
+    const id = spotForecastIdFromUrl(
+      dom.eventSpotForecastUrl.value);
+    if (id) {
+      dom.eventSpotForecastId.value = id;
+    }
+  });
+  dom.eventSpotForecastId.addEventListener("change", () => {
+    const id = dom.eventSpotForecastId.value.trim();
+    if (id && !dom.eventSpotForecastUrl.value.trim()) {
+      dom.eventSpotForecastUrl.value = spotForecastUrlFromId(id);
+    }
+  });
 }
 
 function beginSimpleSquare() {
@@ -3757,32 +3936,34 @@ function buildConditionForms() {
   }
 
   dom.actualWeatherFields.replaceChildren();
-  for (const [key, label] of ACTUAL_WEATHER_FIELDS) {
+  for (const definition of ACTUAL_WEATHER_FIELDS) {
     const group = document.createElement("div");
-    group.className = "field-group";
+    group.className = definition.wide
+      ? "field-group field-group--wide"
+      : "field-group";
+
     const inputLabel = document.createElement("label");
-    inputLabel.htmlFor = `actual-${key}`;
-    inputLabel.textContent = label;
+    inputLabel.htmlFor = `actual-${definition.key}`;
+    inputLabel.textContent = definition.label;
+
     let input;
-    if (key.toLowerCase().includes("direction")) {
+    if (definition.type === "direction") {
       input = document.createElement("select");
-      const empty = document.createElement("option");
-      empty.value = "";
-      empty.textContent = "Not entered";
-      input.append(empty);
-      DIRECTIONS.forEach((direction) => {
-        const option = document.createElement("option");
-        option.value = direction;
-        option.textContent = direction;
-        input.append(option);
-      });
+      setSelectDomainOptions(input, FALLBACK_DIRECTION_OPTIONS, "Not entered");
+    } else if (definition.type === "textarea") {
+      input = document.createElement("textarea");
+      input.rows = definition.rows || 3;
+      if (definition.maxLength) input.maxLength = definition.maxLength;
     } else {
       input = document.createElement("input");
       input.type = "number";
-      input.step = "any";
+      input.step = definition.step || "any";
+      if (definition.min !== undefined) input.min = String(definition.min);
+      if (definition.max !== undefined) input.max = String(definition.max);
     }
-    input.id = `actual-${key}`;
-    input.dataset.actualWeather = key;
+
+    input.id = `actual-${definition.key}`;
+    input.dataset.actualWeather = definition.key;
     group.append(inputLabel, input);
     dom.actualWeatherFields.append(group);
   }
@@ -3891,6 +4072,7 @@ function openEventDialog(eventRecord = null) {
   const unit = selectedUnit();
   if (!unit) return;
   dom.eventForm.reset();
+  refreshBurnEventDomainControls();
   dom.eventDialogTitle.textContent = eventRecord ? "Edit burn event" : "Add burn event";
   dom.eventId.value = eventRecord?.id || "";
   dom.plannedBurnDate.value = eventRecord?.plannedDate || "";
@@ -3899,6 +4081,15 @@ function openEventDialog(eventRecord = null) {
   dom.treatmentType.value = eventRecord?.treatmentType || "";
   dom.plannedAcres.value = eventRecord?.plannedAcres ?? formatNumber(unit.acres, 2).replace(/,/g, "");
   dom.actualAcres.value = eventRecord?.actualAcres ?? "";
+  dom.eventBurnBoss.value = eventRecord?.burnBoss || "";
+  dom.eventPermitRef.value = eventRecord?.permitRef || "";
+  dom.eventSpotForecastId.value = eventRecord?.spotForecastId || "";
+  dom.eventSpotForecastUrl.value = eventRecord?.spotForecastUrl || "";
+  dom.eventIntensityClass.value = eventRecord?.intensityClass || "";
+  dom.eventCoveragePct.value = eventRecord?.coveragePct ?? "";
+  dom.eventEffectiveness.value = eventRecord?.effectiveness || "";
+  dom.eventFollowUp.value = eventRecord?.followUp || "";
+  dom.eventSmokeNotes.value = eventRecord?.smokeNotes || "";
   dom.eventNotes.value = eventRecord?.notes || "";
   document.querySelectorAll("[data-actual-weather]").forEach((input) => {
     input.value = eventRecord?.actualWeather?.[input.dataset.actualWeather] ?? "";
@@ -3916,6 +4107,16 @@ async function handleEventFormSubmit(event) {
     actualWeather[input.dataset.actualWeather] = input.value;
   });
   const existing = dom.eventId.value ? unit.events.find((item) => item.id === dom.eventId.value) : null;
+
+  let spotForecastId = dom.eventSpotForecastId.value.trim();
+  let spotForecastUrl = dom.eventSpotForecastUrl.value.trim();
+  const spotIdFromUrl = spotForecastIdFromUrl(spotForecastUrl);
+  if (spotIdFromUrl) {
+    spotForecastId = spotIdFromUrl;
+  } else if (spotForecastId && !spotForecastUrl) {
+    spotForecastUrl = spotForecastUrlFromId(spotForecastId);
+  }
+
   const record = {
     ...(existing || {}),
     id: existing?.id || dom.eventId.value || crypto.randomUUID(),
@@ -3925,9 +4126,23 @@ async function handleEventFormSubmit(event) {
     treatmentType: dom.treatmentType.value,
     plannedAcres: toNullableNumber(dom.plannedAcres.value),
     actualAcres: toNullableNumber(dom.actualAcres.value),
-    notes: dom.eventNotes.value,
+    burnBoss: dom.eventBurnBoss.value.trim(),
+    permitRef: dom.eventPermitRef.value.trim(),
+    spotForecastId,
+    spotForecastUrl,
+    intensityClass: dom.eventIntensityClass.value,
+    coveragePct: toNullableNumber(dom.eventCoveragePct.value),
+    effectiveness: dom.eventEffectiveness.value.trim(),
+    followUp: dom.eventFollowUp.value.trim(),
+    smokeNotes: dom.eventSmokeNotes.value.trim(),
+    notes: dom.eventNotes.value.trim(),
     actualWeather
   };
+  if (record.coveragePct != null && (record.coveragePct < 0 || record.coveragePct > 100)) {
+    dom.eventCoveragePct.focus();
+    announce("Burn coverage must be between 0 and 100 percent.");
+    return;
+  }
   try {
     await ensureSourceGlobalId(unit);
     await persistBurnEvent(unit, record);

@@ -1,18 +1,24 @@
-# California State Parks Prescribed Fire Operations Hub — Version 3.9
+# California State Parks Prescribed Fire Operations Hub — Version 3.10
 
-This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.9 uses the user-provided Version 3.8 application as the base and the supplied `CVD_PrescribedFire_StagingMap_FL.gdb` as the authoritative related-table schema. It preserves the current ArcGIS Online OAuth workflow, web map, `RxBurns_Poly`, NWS workflows, responsive layout, dashboard, and editing behavior while adding durable related-table persistence and fire-effects report-data export.
+This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.10 builds on the working Version 3.9 related-table persistence and completes the Burn Event and Actual Weather / Fire Behavior form mappings using the supplied `CVD_PrescribedFire_StagingMap_FL.gdb` schema. It preserves the current ArcGIS Online OAuth workflow, web map, `RxBurns_Poly`, related-table discovery, responsive layout, NWS workflows, and report-data export.
 
 ## Run locally
 
 Serve the folder through HTTP rather than opening `index.html` with a `file:///` address.
 
 ```powershell
-cd "C:\\path\\to\\CVD_Prescribed_Fire_GIS_Hub_v3_8"
+cd "C:\\path\\to\\CVD_Prescribed_Fire_GIS_Hub_v3_10"
 python -m http.server 8000
 ```
 
 Open `http://localhost:8000`.
 
+
+## Version 3.10 burn-event and fire-behavior completion
+
+Version 3.10 completes the form and persistence mappings for Burn Boss, permit/authorization, NWS Spot Forecast ID and URL, fire intensity, burn coverage, effectiveness, follow-up needs, smoke conditions/impacts, flame length, rate of spread, observed smoke direction, smoke behavior, and observation notes. ArcGIS coded-value domains are used for fire intensity and direction fields when the related tables are available.
+
+The NWS Spot Forecast URL and numeric ID are synchronized in the Burn Event form. Probability of Precipitation remains preserved in `OBS_NOTES` because the supplied actual-weather table does not contain a dedicated `POP_PCT` field.
 
 ## Version 3.9 related-table correction
 
