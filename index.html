@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Prescribed Fire Operations Hub</title>
 
-    <script src="./config.js?v=3.10"></script>
+    <script src="./config.js?v=3.11"></script>
     <script>
       const authConfig = window.APP_CONFIG.authentication || {};
       const oauthConfigured =
@@ -29,7 +29,7 @@
       };
     </script>
     <script type="module" src="https://js.arcgis.com/5.1/"></script>
-    <link rel="stylesheet" href="./styles.css?v=3.10" />
+    <link rel="stylesheet" href="./styles.css?v=3.11" />
   </head>
 
   <body class="calcite-mode-dark">
@@ -427,6 +427,7 @@
                 <div class="table-scroll" tabindex="0" aria-label="Scrollable seven-day burn forecast table">
                   <table class="forecast-matrix"><thead id="forecastMatrixHead"></thead><tbody id="forecastMatrixBody"></tbody></table>
                 </div>
+                <p class="source-note">Daytime relative humidity is the minimum hourly NWS RH forecast within each daytime period. Atmospheric Dispersion Index (ADI) and LVORI are read from the raw NWS grid when the issuing Weather Forecast Office provides those layers; otherwise they remain n/a and are excluded from scoring.</p>
                 <div class="resource-links-row resource-links-row--three weather-resource-actions">
                   <a id="spotForecastUnitLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a>
                   <a id="pointForecastLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Point Forecast</a>
@@ -653,6 +654,6 @@
       </div>
     </dialog>
 
-    <script type="module" src="./app.js?v=3.10"></script>
+    <script type="module" src="./app.js?v=3.11"></script>
   </body>
 </html>

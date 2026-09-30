@@ -1366,7 +1366,9 @@ function relatedForecastPeriodToDaily(a = {}) {
       quantitativePrecipitation: toNullableNumber(a.QPF_IN),
       transportWindSpeed: toNullableNumber(a.TRANS_WIND_MAX ?? a.TRANS_WIND_MIN),
       transportWindDirection: a.TRANS_WIND_DIR || null,
-      mixingHeight: toNullableNumber(a.MIX_HT_FT)
+      mixingHeight: toNullableNumber(a.MIX_HT_FT),
+      atmosphericDispersionIndex: toNullableNumber(a.DI_VALUE),
+      lvori: toNullableNumber(a.LVORI_VALUE)
     },
     relatedScore: toNullableNumber(a.SCORE_PCT),
     relatedScoreClass: a.SCORE_CLASS || null,
@@ -1822,12 +1824,14 @@ function scoreForecastPeriodDetails(period, preferred) {
     probabilityPrecipitation: Number(period.probabilityOfPrecipitation?.value),
     transportWindSpeed: Number(period.grid?.transportWindSpeed),
     transportWindDirection: period.grid?.transportWindDirection,
-    mixingHeight: Number(period.grid?.mixingHeight)
+    mixingHeight: Number(period.grid?.mixingHeight),
+    dispersionIndex: Number(period.grid?.atmosphericDispersionIndex),
+    lvori: Number(period.grid?.lvori)
   };
   let evaluated = 0;
   let matched = 0;
   const missing = [];
-  for (const key of ["temperature", "relativeHumidity", "windSpeed", "windGust", "quantitativePrecipitation", "probabilityPrecipitation", "transportWindSpeed", "mixingHeight"]) {
+  for (const key of ["temperature", "relativeHumidity", "windSpeed", "windGust", "quantitativePrecipitation", "probabilityPrecipitation", "transportWindSpeed", "mixingHeight", "dispersionIndex", "lvori"]) {
     const range = preferred[key];
     const hasRange = range && (range.min != null || range.max != null);
     if (!hasRange) continue;
@@ -1902,8 +1906,8 @@ async function persistForecastRun(unit, payload) {
       TRANS_WIND_MAX: toNullableNumber(period.grid?.transportWindSpeed),
       TRANS_WIND_DIR: period.grid?.transportWindDirection || null,
       MIX_HT_FT: toNullableNumber(period.grid?.mixingHeight),
-      DI_VALUE: null,
-      LVORI_VALUE: null,
+      DI_VALUE: toNullableNumber(period.grid?.atmosphericDispersionIndex),
+      LVORI_VALUE: toNullableNumber(period.grid?.lvori),
       FACTORS_EVAL: score.evaluated,
       FACTORS_MATCH: score.matched,
       SCORE_PCT: score.score,
@@ -4378,7 +4382,7 @@ async function loadPointForecast(latitude, longitude, unitId = null) {
     ]);
     const hourly = hourlyData.properties?.periods || [];
     const basicDaily = (dailyData.properties?.periods || []).filter((period) => period.isDaytime).slice(0, 7);
-    const daily = enrichDailyForecastPeriods(basicDaily, gridData?.properties || {});
+    const daily = enrichDailyForecastPeriods(basicDaily, gridData?.properties || {}, hourly);
     if (!hourly.length) throw new Error("No hourly forecast periods were returned.");
 
     const payload = { latitude, longitude, pointData, hourly, daily, updated: new Date().toISOString() };
@@ -4458,12 +4462,66 @@ function renderPointForecast({ latitude, longitude, pointData, hourly }) {
   dom.weatherContent.hidden = false;
 }
 
-function enrichDailyForecastPeriods(periods, gridProperties) {
+function enrichDailyForecastPeriods(periods, gridProperties, hourlyPeriods = []) {
   return periods.map((period) => {
     const referenceTime = new Date(period.startTime);
+    const periodStart = new Date(period.startTime);
+    const periodEnd = period.endTime
+      ? new Date(period.endTime)
+      : new Date(periodStart.getTime() + 12 * 60 * 60 * 1000);
+
+    // NWS removed relativeHumidity from the 12-hour /forecast endpoint in 2024.
+    // For fire-weather planning, use the minimum hourly RH during each daytime
+    // period. This matches standard NWS fire-weather convention for daytime RH.
+    const hourlyMinRh = getHourlyStatisticForPeriod(
+      hourlyPeriods,
+      periodStart,
+      periodEnd,
+      (hour) => hour.relativeHumidity?.value,
+      "min"
+    );
+    const gridMinRh = getGridStatisticInRange(
+      gridProperties.relativeHumidity,
+      periodStart,
+      periodEnd,
+      "percent",
+      "min"
+    );
+    const minimumRelativeHumidity = Number.isFinite(hourlyMinRh)
+      ? hourlyMinRh
+      : gridMinRh;
+
+    // These layers are exposed by the raw NWS gridpoint endpoint when the
+    // issuing WFO populates them. They are not guaranteed for every grid/WFO.
+    const atmosphericDispersionIndex = getGridStatisticInRange(
+      gridProperties.atmosphericDispersionIndex,
+      periodStart,
+      periodEnd,
+      null,
+      "max"
+    );
+    const lvori = getGridStatisticInRange(
+      gridProperties.lowVisibilityOccurrenceRiskIndex,
+      periodStart,
+      periodEnd,
+      null,
+      "max"
+    );
+
     return {
       ...period,
+      relativeHumidity: {
+        unitCode: period.relativeHumidity?.unitCode || "wmoUnit:percent",
+        value: Number.isFinite(minimumRelativeHumidity)
+          ? Math.round(minimumRelativeHumidity)
+          : null
+      },
       grid: {
+        relativeHumidity: Number.isFinite(minimumRelativeHumidity)
+          ? Math.round(minimumRelativeHumidity)
+          : null,
+        atmosphericDispersionIndex,
+        lvori,
         quantitativePrecipitation: getGridValueAt(gridProperties.quantitativePrecipitation, referenceTime, "in"),
         transportWindSpeed: getGridValueAt(gridProperties.transportWindSpeed, referenceTime, "mph"),
         transportWindDirectionDegrees: getGridValueAt(gridProperties.transportWindDirection, referenceTime, "degree"),
@@ -4480,6 +4538,47 @@ function enrichDailyForecastPeriods(periods, gridProperties) {
         : null
     }
   }));
+}
+
+function getHourlyStatisticForPeriod(hourlyPeriods, startTime, endTime, valueGetter, statistic = "min") {
+  const start = startTime?.getTime?.();
+  const end = endTime?.getTime?.();
+  if (!Array.isArray(hourlyPeriods) || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+
+  const values = hourlyPeriods
+    .filter((period) => {
+      const time = new Date(period.startTime).getTime();
+      return Number.isFinite(time) && time >= start && time < end;
+    })
+    .map((period) => Number(valueGetter(period)))
+    .filter(Number.isFinite);
+
+  if (!values.length) return null;
+  if (statistic === "max") return Math.max(...values);
+  if (statistic === "average") return values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.min(...values);
+}
+
+function getGridStatisticInRange(property, startTime, endTime, targetUnit, statistic = "min") {
+  if (!property || !Array.isArray(property.values)) return null;
+  const start = startTime?.getTime?.();
+  const end = endTime?.getTime?.();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+
+  const values = [];
+  for (const entry of property.values) {
+    const interval = parseNwsValidTime(entry.validTime);
+    if (!interval || interval.end <= start || interval.start >= end) continue;
+    const rawValue = Number(entry.value);
+    if (!Number.isFinite(rawValue)) continue;
+    const converted = convertNwsGridValue(rawValue, property.uom, targetUnit);
+    if (Number.isFinite(converted)) values.push(converted);
+  }
+
+  if (!values.length) return null;
+  if (statistic === "max") return Math.max(...values);
+  if (statistic === "average") return values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.min(...values);
 }
 
 function getGridValueAt(property, referenceTime, targetUnit) {
@@ -4554,11 +4653,13 @@ function scoreForecastPeriod(period, preferred) {
     probabilityPrecipitation: Number(period.probabilityOfPrecipitation?.value),
     transportWindSpeed: Number(period.grid?.transportWindSpeed),
     transportWindDirection: period.grid?.transportWindDirection,
-    mixingHeight: Number(period.grid?.mixingHeight)
+    mixingHeight: Number(period.grid?.mixingHeight),
+    dispersionIndex: Number(period.grid?.atmosphericDispersionIndex),
+    lvori: Number(period.grid?.lvori)
   };
   let considered = 0;
   let matched = 0;
-  for (const key of ["temperature", "relativeHumidity", "windSpeed", "windGust", "quantitativePrecipitation", "probabilityPrecipitation", "transportWindSpeed", "mixingHeight"]) {
+  for (const key of ["temperature", "relativeHumidity", "windSpeed", "windGust", "quantitativePrecipitation", "probabilityPrecipitation", "transportWindSpeed", "mixingHeight", "dispersionIndex", "lvori"]) {
     const range = preferred[key];
     const value = available[key];
     const hasRange = range && (range.min != null || range.max != null);
@@ -4596,7 +4697,7 @@ function renderForecastMatrix(unit) {
   const rows = [
     ["Burn forecast score", "—", (period, index) => unit.forecastScores[index] == null ? "n/a" : `${unit.forecastScores[index]}%`],
     ["Temperature (°F)", formatRange(unit.preferred.temperature), (period) => period ? safeText(period.temperature, "n/a") : "n/a"],
-    ["Relative humidity (%)", formatRange(unit.preferred.relativeHumidity), (period) => period ? formatNullable(period.relativeHumidity?.value) : "n/a"],
+    ["Minimum relative humidity (%)", formatRange(unit.preferred.relativeHumidity), (period) => period ? formatNullable(period.relativeHumidity?.value) : "n/a"],
     ["Wind speed (mph)", formatRange(unit.preferred.windSpeed), (period) => period ? safeText(period.windSpeed, "n/a") : "n/a"],
     ["Wind direction", unit.preferred.windDirection.join(", ") || "Any", (period) => period ? safeText(period.windDirection, "n/a") : "n/a"],
     ["Wind gust (mph)", formatRange(unit.preferred.windGust), (period) => period ? formatNullable(period.grid?.windGust ?? parseWindNumber(period.windGust), 1) : "n/a"],
@@ -4604,9 +4705,9 @@ function renderForecastMatrix(unit) {
     ["Probability of precipitation (%)", formatRange(unit.preferred.probabilityPrecipitation), (period) => period ? formatNullable(period.probabilityOfPrecipitation?.value) : "n/a"],
     ["Transport wind speed (mph)", formatRange(unit.preferred.transportWindSpeed), (period) => period ? formatNullable(period.grid?.transportWindSpeed, 1) : "n/a"],
     ["Transport wind direction", unit.preferred.transportWindDirection.join(", ") || "Any", (period) => period ? safeText(period.grid?.transportWindDirection, "n/a") : "n/a"],
-    ["Dispersion index", formatRange(unit.preferred.dispersionIndex), () => "n/a"],
+    ["Atmospheric dispersion index (ADI)", formatRange(unit.preferred.dispersionIndex), (period) => period ? formatNullable(period.grid?.atmosphericDispersionIndex, 0) : "n/a"],
     ["Mixing height (ft)", formatRange(unit.preferred.mixingHeight), (period) => period ? formatNullable(period.grid?.mixingHeight, 0) : "n/a"],
-    ["LVORI", formatRange(unit.preferred.lvori), () => "n/a"]
+    ["LVORI", formatRange(unit.preferred.lvori), (period) => period ? formatNullable(period.grid?.lvori, 0) : "n/a"]
   ];
 
   for (const [label, preferred, valueFn] of rows) {
