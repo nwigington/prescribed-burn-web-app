@@ -718,21 +718,17 @@ function configureMapAccessibility() {
 }
 
 function configureMapPopupBehavior() {
-  // This application presents selected-feature details in the accessible Map
-  // Tools drawer. Disable the ArcGIS default popup so it cannot cover the
-  // drawer, map controls, or operational side panel.
-  state.mapElement.popupDisabled = true;
+  // Allow Web Map feature-layer popups to open normally.
+  state.mapElement.popupDisabled = false;
+
   if (!state.view) return;
-  state.view.popupEnabled = false;
-  try {
-    state.view.closePopup();
-  } catch (error) {
-    console.debug("The ArcGIS popup was not open during initialization.", error);
-  }
-  try {
-    state.view.popup = null;
-  } catch (error) {
-    console.debug("The ArcGIS popup instance could not be cleared.", error);
+
+  state.view.popupEnabled = true;
+
+  // If a previous configuration explicitly set the popup to null,
+  // restore the default popup configuration.
+  if (state.view.popup === null) {
+    state.view.popup = {};
   }
 }
 
@@ -883,29 +879,79 @@ function initializeSketch() {
 function initializeMapInteractions() {
   state.view.on("click", async (event) => {
     if (state.drawingMode === "polygon") return;
+
     if (state.drawingMode === "square") {
       createSimpleSquare(event.mapPoint);
       return;
     }
 
     const response = await state.view.hitTest(event);
-    const hit = response.results.find((result) => {
+
+    // --------------------------------------------------------
+    // 1. Check the application's custom prescribed-burn overlay.
+    // --------------------------------------------------------
+    const burnHit = response.results.find((result) => {
       const graphic = result.graphic;
-      return graphic?.attributes?.layerType === "burn" || graphic?.attributes?.layerType === "burn-marker";
+
+      return (
+        graphic?.attributes?.layerType === "burn" ||
+        graphic?.attributes?.layerType === "burn-marker"
+      );
     });
 
-    if (hit) {
-      const id = hit.graphic.attributes.unitId;
-      await selectUnit(id, { zoom: true, openPanel: false });
+    if (burnHit) {
+      const id = burnHit.graphic.attributes.unitId;
+
+      await selectUnit(id, {
+        zoom: true,
+        openPanel: false
+      });
+
       activateMapTool("identify");
       return;
     }
 
+    // --------------------------------------------------------
+    // 2. Check whether the user clicked a popup-enabled
+    //    FeatureLayer from the Web Map.
+    //
+    //    If so, let ArcGIS handle the popup automatically
+    //    and DO NOT start a point-forecast request.
+    // --------------------------------------------------------
+    const featureLayerHit = response.results.find((result) => {
+      const graphic = result.graphic;
+      const layer = graphic?.layer;
+
+      if (!graphic || !layer) return false;
+
+      // Ignore temporary application graphics.
+      if (graphic.attributes?.layerType) return false;
+
+      // Only intercept actual FeatureLayers.
+      if (layer.type !== "feature") return false;
+
+      // Respect the popup setting saved in the Web Map.
+      return layer.popupEnabled !== false;
+    });
+
+    if (featureLayerHit) {
+      // ArcGIS automatically opens the Web Map popup because
+      // view.popupEnabled = true.
+      return;
+    }
+
+    // --------------------------------------------------------
+    // 3. Empty map click = point forecast.
+    // --------------------------------------------------------
     const point = event.mapPoint;
+
     if (point) {
-      // A point forecast becomes the active map selection. Clear prior map
-      // selection state without touching an unfinished burn-unit sketch.
-      clearMapSelection({ clearForecast: true, announceChange: false, preservePanel: true });
+      clearMapSelection({
+        clearForecast: true,
+        announceChange: false,
+        preservePanel: true
+      });
+
       await selectWeatherLocation(point, true);
     }
   });
@@ -1005,7 +1051,7 @@ async function resolveSourceBurnLayer() {
     if (mapLayer) {
       await mapLayer.load();
       state.sourceLayerInWebMap = true;
-      mapLayer.popupEnabled = false;
+      mapLayer.popupEnabled = true;
       mapLayer.listMode = "show";
       mapLayer.visible = false;
       reconcileBurnFieldMap(mapLayer);
