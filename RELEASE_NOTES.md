@@ -1,3 +1,9 @@
+# Release Notes — Version 3.12
+
+* Fixed null NWS ADI/LVORI values being coerced to 0 and incorrectly included in scoring.
+* Added an expanded seven-day forecast dialog with frozen factor/preferred columns.
+* See `RELEASE_NOTES_v3_12.md` for details.
+
 # Release Notes — Version 3.10
 
 ## Burn-event and actual-weather completion

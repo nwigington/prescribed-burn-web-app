@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Prescribed Fire Operations Hub</title>
 
-    <script src="./config.js?v=3.11"></script>
+    <script src="./config.js?v=3.12"></script>
     <script>
       const authConfig = window.APP_CONFIG.authentication || {};
       const oauthConfigured =
@@ -29,7 +29,7 @@
       };
     </script>
     <script type="module" src="https://js.arcgis.com/5.1/"></script>
-    <link rel="stylesheet" href="./styles.css?v=3.11" />
+    <link rel="stylesheet" href="./styles.css?v=3.12" />
   </head>
 
   <body class="calcite-mode-dark">
@@ -423,11 +423,11 @@
               </section>
 
               <section class="content-section">
-                <div class="section-heading-row"><div><h3>Weather / Fire-Behavior Factors</h3><p id="forecastUpdated" class="quiet-status">Not Updated</p></div><div class="button-row"><button id="refreshUnitForecastButton" class="secondary-button" type="button">Update Forecast Data</button><button id="editConditionsButton2" class="secondary-button" type="button">Edit Conditions</button></div></div>
+                <div class="section-heading-row"><div><h3>Weather / Fire-Behavior Factors</h3><p id="forecastUpdated" class="quiet-status">Not Updated</p></div><div class="button-row"><button id="refreshUnitForecastButton" class="secondary-button" type="button">Update Forecast Data</button><button id="expandForecastButton" class="secondary-button" type="button" aria-haspopup="dialog" aria-controls="forecastDialog">Expand Forecast</button><button id="editConditionsButton2" class="secondary-button" type="button">Edit Conditions</button></div></div>
                 <div class="table-scroll" tabindex="0" aria-label="Scrollable seven-day burn forecast table">
                   <table class="forecast-matrix"><thead id="forecastMatrixHead"></thead><tbody id="forecastMatrixBody"></tbody></table>
                 </div>
-                <p class="source-note">Daytime relative humidity is the minimum hourly NWS RH forecast within each daytime period. Atmospheric Dispersion Index (ADI) and LVORI are read from the raw NWS grid when the issuing Weather Forecast Office provides those layers; otherwise they remain n/a and are excluded from scoring.</p>
+                <p class="source-note">Daytime relative humidity is the minimum hourly NWS RH forecast within each daytime period. Atmospheric Dispersion Index (ADI) and LVORI are read from the raw NWS grid when the issuing Weather Forecast Office provides real numeric values; null or unavailable values remain n/a and are excluded from scoring.</p>
                 <div class="resource-links-row resource-links-row--three weather-resource-actions">
                   <a id="spotForecastUnitLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a>
                   <a id="pointForecastLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Point Forecast</a>
@@ -493,6 +493,20 @@
         <div id="conditionsFields" class="dialog-content conditions-grid"></div>
         <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="conditionsDialog">Cancel</button><button class="primary-button" type="submit">Save Conditions</button></div>
       </form>
+    </dialog>
+
+    <dialog id="forecastDialog" class="app-dialog app-dialog--forecast" aria-labelledby="forecastDialogTitle">
+      <div class="dialog-header">
+        <div><p class="section-kicker">Weather / Fire-Behavior Factors</p><h2 id="forecastDialogTitle">7-Day Burn Forecast</h2></div>
+        <button class="icon-button" type="button" data-close-dialog="forecastDialog" aria-label="Close expanded forecast">×</button>
+      </div>
+      <div class="dialog-content forecast-dialog-content">
+        <p id="forecastDialogUpdated" class="quiet-status">Not Updated</p>
+        <div class="table-scroll table-scroll--forecast-expanded" tabindex="0" aria-label="Expanded scrollable seven-day burn forecast table">
+          <table class="forecast-matrix forecast-matrix--expanded"><thead id="forecastDialogHead"></thead><tbody id="forecastDialogBody"></tbody></table>
+        </div>
+        <p class="source-note">Daytime relative humidity is the minimum hourly NWS RH forecast within each daytime period. ADI and LVORI are included only when the NWS grid supplies a real numeric value; missing or null grid values are displayed as n/a and excluded from scoring.</p>
+      </div>
     </dialog>
 
     <dialog id="eventDialog" class="app-dialog app-dialog--wide" aria-labelledby="eventDialogTitle">
@@ -654,6 +668,6 @@
       </div>
     </dialog>
 
-    <script type="module" src="./app.js?v=3.11"></script>
+    <script type="module" src="./app.js?v=3.12"></script>
   </body>
 </html>

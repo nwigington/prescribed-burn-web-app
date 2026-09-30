@@ -921,3 +921,72 @@ tbody tr:hover { background: rgba(244,201,93,0.055); }
   .legend-symbol, .forecast-chip { border: 2px solid CanvasText; }
   .operations-panel-resizer::before { background: ButtonText; }
 }
+
+
+/* --------------------------------------------------------------------------
+   Version 3.12 — expanded seven-day forecast dialog
+   -------------------------------------------------------------------------- */
+.app-dialog--forecast {
+  width: min(96vw, 96rem);
+  max-width: none;
+  height: min(92dvh, 60rem);
+  max-height: 92dvh;
+  overflow: hidden;
+}
+.forecast-dialog-content {
+  display: flex;
+  height: calc(100% - 4.5rem);
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.table-scroll--forecast-expanded {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none !important;
+  overflow: auto;
+}
+.forecast-matrix--expanded {
+  width: max-content;
+  min-width: 88rem;
+}
+.forecast-matrix--expanded th,
+.forecast-matrix--expanded td {
+  min-width: 8.25rem;
+  padding: 0.72rem 0.8rem;
+  white-space: normal;
+}
+.forecast-matrix--expanded th:first-child,
+.forecast-matrix--expanded td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  min-width: 15rem;
+  background: #111f2b;
+}
+.forecast-matrix--expanded th:nth-child(2),
+.forecast-matrix--expanded td:nth-child(2) {
+  position: sticky;
+  left: 15rem;
+  z-index: 2;
+  min-width: 9.5rem;
+  background: #0d1a24;
+}
+.forecast-matrix--expanded thead th {
+  z-index: 5;
+}
+.forecast-matrix--expanded thead th:first-child {
+  z-index: 7;
+}
+.forecast-matrix--expanded thead th:nth-child(2) {
+  z-index: 6;
+}
+
+@media (max-width: 700px) {
+  .app-dialog--forecast {
+    width: calc(100vw - 0.5rem);
+    height: 94dvh;
+    max-height: 94dvh;
+  }
+  .forecast-matrix--expanded { min-width: 78rem; }
+}

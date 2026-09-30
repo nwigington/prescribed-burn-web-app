@@ -469,8 +469,9 @@ function cacheDom() {
     "notificationToggle", "subscriberList", "subscriberForm", "subscriberName", "subscriberEmail",
     "preferredConditionsSummary", "editConditionsButton", "editConditionsButton2", "smokeToggle",
     "transportDirection", "directionalDegrees", "plumeDistance", "resetSmokeButton",
-    "sensitiveAreaSummary", "forecastUpdated", "refreshUnitForecastButton", "forecastMatrixHead",
-    "forecastMatrixBody", "addBurnEventButton", "eventTableBody", "weatherLoading", "weatherEmpty",
+    "sensitiveAreaSummary", "forecastUpdated", "refreshUnitForecastButton", "expandForecastButton", "forecastMatrixHead",
+    "forecastMatrixBody", "forecastDialog", "forecastDialogTitle", "forecastDialogUpdated", "forecastDialogHead", "forecastDialogBody",
+    "addBurnEventButton", "eventTableBody", "weatherLoading", "weatherEmpty",
     "weatherContent", "weatherCoordinates", "weatherLocation", "weatherTemperature",
     "weatherShortForecast", "weatherHumidity", "weatherWind", "weatherGust", "weatherPrecip",
     "hourlyForecastRows", "focusMapButton", "supportContact", "helpButton", "helpDialog",
@@ -1860,19 +1861,20 @@ function scoreClassCode(score) {
 }
 
 function scoreForecastPeriodDetails(period, preferred) {
+  const gridWindGust = toNullableNumber(period.grid?.windGust);
   const available = {
-    temperature: Number(period.temperature),
-    relativeHumidity: Number(period.relativeHumidity?.value),
+    temperature: toNullableNumber(period.temperature),
+    relativeHumidity: toNullableNumber(period.relativeHumidity?.value),
     windSpeed: parseWindNumber(period.windSpeed),
     windDirection: period.windDirection,
-    windGust: Number.isFinite(Number(period.grid?.windGust)) ? Number(period.grid.windGust) : parseWindNumber(period.windGust),
-    quantitativePrecipitation: Number(period.grid?.quantitativePrecipitation),
-    probabilityPrecipitation: Number(period.probabilityOfPrecipitation?.value),
-    transportWindSpeed: Number(period.grid?.transportWindSpeed),
+    windGust: gridWindGust ?? parseWindNumber(period.windGust),
+    quantitativePrecipitation: toNullableNumber(period.grid?.quantitativePrecipitation),
+    probabilityPrecipitation: toNullableNumber(period.probabilityOfPrecipitation?.value),
+    transportWindSpeed: toNullableNumber(period.grid?.transportWindSpeed),
     transportWindDirection: period.grid?.transportWindDirection,
-    mixingHeight: Number(period.grid?.mixingHeight),
-    dispersionIndex: Number(period.grid?.atmosphericDispersionIndex),
-    lvori: Number(period.grid?.lvori)
+    mixingHeight: toNullableNumber(period.grid?.mixingHeight),
+    dispersionIndex: toNullableNumber(period.grid?.atmosphericDispersionIndex),
+    lvori: toNullableNumber(period.grid?.lvori)
   };
   let evaluated = 0;
   let matched = 0;
@@ -3452,7 +3454,7 @@ function initializeDialogs() {
   document.querySelectorAll("[data-close-dialog]").forEach((button) => {
     button.addEventListener("click", () => closeDialog(button.dataset.closeDialog));
   });
-  [dom.unitDialog, dom.conditionsDialog, dom.eventDialog, dom.confirmDialog, dom.helpDialog, dom.accountDialog].forEach((dialog) => {
+  [dom.unitDialog, dom.conditionsDialog, dom.eventDialog, dom.forecastDialog, dom.confirmDialog, dom.helpDialog, dom.accountDialog].forEach((dialog) => {
     dialog.addEventListener("click", (event) => {
       const bounds = dialog.getBoundingClientRect();
       const outside = event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom;
@@ -3486,6 +3488,7 @@ function initializeFormsAndControls() {
   dom.refreshButton.addEventListener("click", refreshAllData);
   dom.helpButton.addEventListener("click", () => dom.helpDialog.showModal());
   dom.accountButton.addEventListener("click", () => dom.accountDialog.showModal());
+  dom.expandForecastButton?.addEventListener("click", openForecastDialog);
   dom.arcgisSignInButton.addEventListener("click", signInUser);
   dom.logoutButton.addEventListener("click", signOutUser);
   dom.mapToolsToggle.addEventListener("click", () => dom.mapToolsDrawer.hidden ? openMapTools() : closeMapTools());
@@ -4596,8 +4599,8 @@ function getHourlyStatisticForPeriod(hourlyPeriods, startTime, endTime, valueGet
       const time = new Date(period.startTime).getTime();
       return Number.isFinite(time) && time >= start && time < end;
     })
-    .map((period) => Number(valueGetter(period)))
-    .filter(Number.isFinite);
+    .map((period) => toNullableNumber(valueGetter(period)))
+    .filter((value) => value !== null);
 
   if (!values.length) return null;
   if (statistic === "max") return Math.max(...values);
@@ -4615,8 +4618,8 @@ function getGridStatisticInRange(property, startTime, endTime, targetUnit, stati
   for (const entry of property.values) {
     const interval = parseNwsValidTime(entry.validTime);
     if (!interval || interval.end <= start || interval.start >= end) continue;
-    const rawValue = Number(entry.value);
-    if (!Number.isFinite(rawValue)) continue;
+    const rawValue = toNullableNumber(entry.value);
+    if (rawValue === null) continue;
     const converted = convertNwsGridValue(rawValue, property.uom, targetUnit);
     if (Number.isFinite(converted)) values.push(converted);
   }
@@ -4642,8 +4645,8 @@ function getGridValueAt(property, referenceTime, targetUnit) {
     const distance = Math.abs(reference - interval.start);
     if (distance < selectedDistance) { selected = entry; selectedDistance = distance; }
   }
-  const value = Number(selected?.value);
-  if (!Number.isFinite(value)) return null;
+  const value = toNullableNumber(selected?.value);
+  if (value === null) return null;
   return convertNwsGridValue(value, property.uom, targetUnit);
 }
 
@@ -4689,19 +4692,20 @@ function updateUnitScoresFromForecast(unit, daily) {
 }
 
 function scoreForecastPeriod(period, preferred) {
+  const gridWindGust = toNullableNumber(period.grid?.windGust);
   const available = {
-    temperature: Number(period.temperature),
-    relativeHumidity: Number(period.relativeHumidity?.value),
+    temperature: toNullableNumber(period.temperature),
+    relativeHumidity: toNullableNumber(period.relativeHumidity?.value),
     windSpeed: parseWindNumber(period.windSpeed),
     windDirection: period.windDirection,
-    windGust: Number.isFinite(Number(period.grid?.windGust)) ? Number(period.grid.windGust) : parseWindNumber(period.windGust),
-    quantitativePrecipitation: Number(period.grid?.quantitativePrecipitation),
-    probabilityPrecipitation: Number(period.probabilityOfPrecipitation?.value),
-    transportWindSpeed: Number(period.grid?.transportWindSpeed),
+    windGust: gridWindGust ?? parseWindNumber(period.windGust),
+    quantitativePrecipitation: toNullableNumber(period.grid?.quantitativePrecipitation),
+    probabilityPrecipitation: toNullableNumber(period.probabilityOfPrecipitation?.value),
+    transportWindSpeed: toNullableNumber(period.grid?.transportWindSpeed),
     transportWindDirection: period.grid?.transportWindDirection,
-    mixingHeight: Number(period.grid?.mixingHeight),
-    dispersionIndex: Number(period.grid?.atmosphericDispersionIndex),
-    lvori: Number(period.grid?.lvori)
+    mixingHeight: toNullableNumber(period.grid?.mixingHeight),
+    dispersionIndex: toNullableNumber(period.grid?.atmosphericDispersionIndex),
+    lvori: toNullableNumber(period.grid?.lvori)
   };
   let considered = 0;
   let matched = 0;
@@ -4722,6 +4726,34 @@ function scoreForecastPeriod(period, preferred) {
     if (preferred.transportWindDirection.includes(available.transportWindDirection)) matched += 1;
   }
   return considered ? Math.round((matched / considered) * 100) : null;
+}
+
+function syncExpandedForecastTable() {
+  if (!dom.forecastDialogHead || !dom.forecastDialogBody) return;
+
+  dom.forecastDialogHead.replaceChildren(
+    ...Array.from(dom.forecastMatrixHead.children).map((node) => node.cloneNode(true))
+  );
+  dom.forecastDialogBody.replaceChildren(
+    ...Array.from(dom.forecastMatrixBody.children).map((node) => node.cloneNode(true))
+  );
+
+  if (dom.forecastDialogUpdated) {
+    dom.forecastDialogUpdated.textContent = dom.forecastUpdated.textContent;
+  }
+}
+
+function openForecastDialog() {
+  const unit = selectedUnit();
+  if (!unit || !dom.forecastDialog) return;
+
+  dom.forecastDialogTitle.textContent = `${unit.name || "Burn unit"} — 7-Day Burn Forecast`;
+  syncExpandedForecastTable();
+  dom.forecastDialog.showModal();
+
+  window.requestAnimationFrame(() => {
+    dom.forecastDialog.querySelector(".table-scroll--forecast-expanded")?.focus();
+  });
 }
 
 function renderForecastMatrix(unit) {
@@ -4772,6 +4804,8 @@ function renderForecastMatrix(unit) {
     }
     dom.forecastMatrixBody.append(row);
   }
+
+  if (dom.forecastDialog?.open) syncExpandedForecastTable();
 }
 
 function updateUnitExternalLinks(unit) {
@@ -5741,8 +5775,8 @@ function toNullableNumber(value) {
 }
 
 function formatNullable(value, decimals = 1) {
-  const number = Number(value);
-  if (!Number.isFinite(number)) return "n/a";
+  const number = toNullableNumber(value);
+  if (number === null) return "n/a";
   const places = Number.isInteger(decimals) ? Math.max(0, Math.min(decimals, 4)) : 1;
   return number.toLocaleString(undefined, {
     minimumFractionDigits: places,

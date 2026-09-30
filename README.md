@@ -203,4 +203,7 @@ The remaining production dependencies are the approved server-side notification-
 * `FIRE_EFFECTS_REPORT_EXPORT.md` — report-data download structure and handling guidance
 * `RELEASE_NOTES_v3_8.md` — Version 3.9 persistence/export changes
 * `RELEASE_NOTES.md` — current and prior release notes
+## Version 3.12 forecast correction
+
+Version 3.12 preserves missing ADI/LVORI grid values as `n/a` and excludes them from scoring rather than coercing null values to zero. The Weather & Smoke panel also includes an **Expand Forecast** dialog for full-width review of the seven-day matrix.
 
