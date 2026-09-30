@@ -22,18 +22,43 @@ const CONDITION_DEFINITIONS = [
 ];
 
 const ACTUAL_WEATHER_FIELDS = [
-  ["temperature", "Temperature (°F)"],
-  ["relativeHumidity", "Relative humidity (%)"],
-  ["windSpeed", "Wind speed (mph)"],
-  ["windDirection", "Wind direction"],
-  ["windGust", "Wind gust (mph)"],
-  ["quantitativePrecipitation", "Quantitative precipitation (in)"],
-  ["probabilityPrecipitation", "Probability of precipitation (%)"],
-  ["transportWindSpeed", "Transport wind speed (mph)"],
-  ["transportWindDirection", "Transport wind direction"],
-  ["dispersionIndex", "Dispersion index"],
-  ["mixingHeight", "Mixing height (ft)"],
-  ["lvori", "LVORI"]
+  { key: "temperature", label: "Temperature (°F)", type: "number", step: "any" },
+  { key: "relativeHumidity", label: "Relative humidity (%)", type: "number", min: 0, max: 100, step: "0.1" },
+  { key: "windSpeed", label: "Wind speed (mph)", type: "number", min: 0, step: "0.1" },
+  { key: "windDirection", label: "Wind direction", type: "direction", arcgisField: "WIND_DIR" },
+  { key: "windGust", label: "Wind gust (mph)", type: "number", min: 0, step: "0.1" },
+  { key: "quantitativePrecipitation", label: "Quantitative precipitation (in)", type: "number", min: 0, step: "0.01" },
+  { key: "probabilityPrecipitation", label: "Probability of precipitation (%)", type: "number", min: 0, max: 100, step: "1" },
+  { key: "transportWindSpeed", label: "Transport wind speed (mph)", type: "number", min: 0, step: "0.1" },
+  { key: "transportWindDirection", label: "Transport wind direction", type: "direction", arcgisField: "TRANS_WIND_DIR" },
+  { key: "dispersionIndex", label: "Dispersion index", type: "number", step: "0.1" },
+  { key: "mixingHeight", label: "Mixing height (ft)", type: "number", min: 0, step: "1" },
+  { key: "lvori", label: "LVORI", type: "number", min: 0, step: "0.1" },
+  { key: "flameLength", label: "Flame length (ft)", type: "number", min: 0, step: "0.1" },
+  { key: "rateOfSpread", label: "Rate of spread (ft/min)", type: "number", min: 0, step: "0.1" },
+  { key: "smokeDirection", label: "Observed smoke direction", type: "direction", arcgisField: "SMOKE_DIR" },
+  { key: "smokeBehavior", label: "Smoke behavior / observations", type: "textarea", rows: 3, maxLength: 1000, wide: true },
+  { key: "observationNotes", label: "Observation notes", type: "textarea", rows: 3, maxLength: 1800, wide: true }
+];
+
+const FALLBACK_DIRECTION_OPTIONS = [
+  { code: "N", name: "North" },
+  { code: "NE", name: "Northeast" },
+  { code: "E", name: "East" },
+  { code: "SE", name: "Southeast" },
+  { code: "S", name: "South" },
+  { code: "SW", name: "Southwest" },
+  { code: "W", name: "West" },
+  { code: "NW", name: "Northwest" },
+  { code: "CALM", name: "Calm" },
+  { code: "VRB", name: "Variable" }
+];
+
+const FALLBACK_INTENSITY_OPTIONS = [
+  { code: "LOW", name: "Low" },
+  { code: "MODERATE", name: "Moderate" },
+  { code: "HIGH", name: "High" },
+  { code: "EXTREME", name: "Extreme" }
 ];
 
 
@@ -91,6 +116,15 @@ const state = {
   reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   weatherAbortController: null,
   forecastCache: new Map(),
+  related: {
+    initialized: false,
+    available: false,
+    serviceRoot: "",
+    tables: {},
+    tableMetadata: {},
+    loadedUnitIds: new Set(),
+    errors: []
+  },
   nwsZoneGeometryCache: new Map(),
   lastPointForecast: null,
   page: 1,
@@ -107,6 +141,97 @@ const dom = {};
 
 const OPERATIONS_PANEL_STORAGE_KEY =
   "cvd-prescribed-fire-operations-panel-collapsed";
+const OPERATIONS_PANEL_WIDTH_STORAGE_KEY =
+  "cvd-prescribed-fire-operations-panel-width";
+const OPERATIONS_PANEL_DESKTOP_QUERY = "(min-width: 961px)";
+const OPERATIONS_PANEL_MIN_WIDTH = 320;
+const OPERATIONS_PANEL_MAX_WIDTH = 600;
+
+/**
+ * Returns true when the application is using the desktop split layout.
+ */
+function usesDesktopSplitLayout() {
+  return window.matchMedia(OPERATIONS_PANEL_DESKTOP_QUERY).matches;
+}
+
+function getOperationsPanelWidthBounds() {
+  const width = dom.workspace?.getBoundingClientRect().width || window.innerWidth;
+  const min = OPERATIONS_PANEL_MIN_WIDTH;
+  const max = Math.max(
+    min,
+    Math.min(OPERATIONS_PANEL_MAX_WIDTH, Math.floor(width * 0.48))
+  );
+  return { min, max };
+}
+
+function resizeMapViewSoon(delay = 0) {
+  window.setTimeout(() => {
+    const mapView = state.view || state.mapElement?.view;
+    if (mapView && typeof mapView.resize === "function") mapView.resize();
+  }, delay);
+}
+
+function setOperationsPanelWidth(width, { persist = false } = {}) {
+  if (!dom.workspace || !usesDesktopSplitLayout()) return;
+
+  const bounds = getOperationsPanelWidthBounds();
+  const nextWidth = Math.round(Math.min(bounds.max, Math.max(bounds.min, Number(width) || bounds.min)));
+  dom.workspace.style.setProperty("--operations-panel-width-user", `${nextWidth}px`);
+
+  if (dom.operationsPanelResizer) {
+    dom.operationsPanelResizer.setAttribute("aria-valuemin", String(bounds.min));
+    dom.operationsPanelResizer.setAttribute("aria-valuemax", String(bounds.max));
+    dom.operationsPanelResizer.setAttribute("aria-valuenow", String(nextWidth));
+    dom.operationsPanelResizer.setAttribute("aria-valuetext", `${nextWidth} pixels wide`);
+  }
+
+  if (persist) {
+    try {
+      localStorage.setItem(OPERATIONS_PANEL_WIDTH_STORAGE_KEY, String(nextWidth));
+    } catch (error) {
+      console.warn("Operations panel width preference could not be saved.", error);
+    }
+  }
+
+  resizeMapViewSoon();
+}
+
+function syncOperationsPanelResponsiveState() {
+  if (!dom.workspace || !dom.operationsPanel) return;
+
+  const desktop = usesDesktopSplitLayout();
+  const collapsed = dom.workspace.classList.contains("is-operations-collapsed");
+  dom.operationsPanel.setAttribute("aria-hidden", String(desktop && collapsed));
+
+  if (dom.operationsPanelResizer) {
+    const resizerAvailable = desktop && !collapsed;
+    dom.operationsPanelResizer.setAttribute("aria-hidden", String(!resizerAvailable));
+    dom.operationsPanelResizer.tabIndex = resizerAvailable ? 0 : -1;
+  }
+
+  if (desktop) {
+    let savedWidth = null;
+    try {
+      const raw = localStorage.getItem(OPERATIONS_PANEL_WIDTH_STORAGE_KEY);
+      if (raw !== null && Number.isFinite(Number(raw))) savedWidth = Number(raw);
+    } catch (error) {
+      console.warn("Operations panel width preference could not be read.", error);
+    }
+    if (savedWidth !== null) {
+      setOperationsPanelWidth(savedWidth);
+    } else if (dom.operationsPanelResizer) {
+      const bounds = getOperationsPanelWidthBounds();
+      const measured = Math.round(dom.operationsPanel.getBoundingClientRect().width || bounds.min);
+      const current = Math.min(bounds.max, Math.max(bounds.min, measured));
+      dom.operationsPanelResizer.setAttribute("aria-valuemin", String(bounds.min));
+      dom.operationsPanelResizer.setAttribute("aria-valuemax", String(bounds.max));
+      dom.operationsPanelResizer.setAttribute("aria-valuenow", String(current));
+      dom.operationsPanelResizer.setAttribute("aria-valuetext", `${current} pixels wide`);
+    }
+  }
+
+  resizeMapViewSoon(state.reducedMotion ? 0 : 80);
+}
 
 /**
  * Expands or collapses the desktop operations panel.
@@ -124,21 +249,8 @@ function setOperationsPanelCollapsed(collapsed) {
     return;
   }
 
-  dom.workspace.classList.toggle(
-    "is-operations-collapsed",
-    collapsed
-  );
-
-  dom.operationsPanelToggle.setAttribute(
-    "aria-expanded",
-    String(!collapsed)
-  );
-
-  dom.operationsPanel.setAttribute(
-    "aria-hidden",
-    String(collapsed)
-  );
-
+  dom.workspace.classList.toggle("is-operations-collapsed", collapsed);
+  dom.operationsPanelToggle.setAttribute("aria-expanded", String(!collapsed));
   dom.operationsPanelArrow.textContent = collapsed ? "‹" : "›";
 
   const actionText = collapsed
@@ -147,13 +259,8 @@ function setOperationsPanelCollapsed(collapsed) {
 
   dom.operationsPanelToggleText.textContent = actionText;
   dom.operationsPanelToggle.title = actionText;
-
-  window.setTimeout(() => {
-    const mapView = state.view || state.mapElement?.view;
-    if (mapView && typeof mapView.resize === "function") {
-      mapView.resize();
-    }
-  }, state.reducedMotion ? 0 : 260);
+  syncOperationsPanelResponsiveState();
+  resizeMapViewSoon(state.reducedMotion ? 0 : 260);
 }
 
 function initializeOperationsPanelToggle() {
@@ -167,15 +274,9 @@ function initializeOperationsPanelToggle() {
     setOperationsPanelCollapsed(newCollapsedState);
 
     try {
-      localStorage.setItem(
-        OPERATIONS_PANEL_STORAGE_KEY,
-        String(newCollapsedState)
-      );
+      localStorage.setItem(OPERATIONS_PANEL_STORAGE_KEY, String(newCollapsedState));
     } catch (error) {
-      console.warn(
-        "Operations panel preference could not be saved.",
-        error
-      );
+      console.warn("Operations panel preference could not be saved.", error);
     }
   });
 
@@ -184,13 +285,77 @@ function initializeOperationsPanelToggle() {
     savedOperationsPanelState =
       localStorage.getItem(OPERATIONS_PANEL_STORAGE_KEY) === "true";
   } catch (error) {
-    console.warn(
-      "Operations panel preference could not be read.",
-      error
-    );
+    console.warn("Operations panel preference could not be read.", error);
   }
 
   setOperationsPanelCollapsed(savedOperationsPanelState);
+}
+
+function initializeOperationsPanelResizer() {
+  const resizer = dom.operationsPanelResizer;
+  if (!resizer || !dom.workspace) return;
+
+  let dragging = false;
+
+  const widthFromPointer = (clientX) => {
+    const bounds = dom.workspace.getBoundingClientRect();
+    return bounds.right - clientX;
+  };
+
+  const finishDrag = (event) => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.classList.remove("is-resizing-operations");
+    if (event?.pointerId !== undefined && resizer.hasPointerCapture?.(event.pointerId)) {
+      resizer.releasePointerCapture(event.pointerId);
+    }
+    const current = Number(resizer.getAttribute("aria-valuenow"));
+    if (Number.isFinite(current)) setOperationsPanelWidth(current, { persist: true });
+  };
+
+  resizer.addEventListener("pointerdown", (event) => {
+    if (!usesDesktopSplitLayout() || dom.workspace.classList.contains("is-operations-collapsed")) return;
+    dragging = true;
+    resizer.setPointerCapture?.(event.pointerId);
+    document.body.classList.add("is-resizing-operations");
+    setOperationsPanelWidth(widthFromPointer(event.clientX));
+    event.preventDefault();
+  });
+
+  resizer.addEventListener("pointermove", (event) => {
+    if (!dragging) return;
+    setOperationsPanelWidth(widthFromPointer(event.clientX));
+  });
+
+  resizer.addEventListener("pointerup", finishDrag);
+  resizer.addEventListener("pointercancel", finishDrag);
+
+  resizer.addEventListener("keydown", (event) => {
+    if (!usesDesktopSplitLayout()) return;
+    const bounds = getOperationsPanelWidthBounds();
+    const current = Number(resizer.getAttribute("aria-valuenow")) || Math.round((bounds.min + bounds.max) / 2);
+    let next = current;
+
+    if (event.key === "ArrowLeft") next = current + 16;
+    else if (event.key === "ArrowRight") next = current - 16;
+    else if (event.key === "Home") next = bounds.min;
+    else if (event.key === "End") next = bounds.max;
+    else return;
+
+    event.preventDefault();
+    setOperationsPanelWidth(next, { persist: true });
+  });
+
+  const desktopMedia = window.matchMedia(OPERATIONS_PANEL_DESKTOP_QUERY);
+  desktopMedia.addEventListener?.("change", syncOperationsPanelResponsiveState);
+
+  let resizeTimer = null;
+  window.addEventListener("resize", () => {
+    window.clearTimeout(resizeTimer);
+    resizeTimer = window.setTimeout(syncOperationsPanelResponsiveState, 100);
+  });
+
+  syncOperationsPanelResponsiveState();
 }
 
 initialize().catch((error) => {
@@ -203,6 +368,7 @@ initialize().catch((error) => {
 async function initialize() {
   cacheDom();
   initializeOperationsPanelToggle();
+  initializeOperationsPanelResizer();
   applyBrandingAndLinks();
   buildConditionForms();
   populateDirectionOptions();
@@ -275,6 +441,8 @@ async function initialize() {
   // layer cannot leave the alert section spinning indefinitely.
   const alertsPromise = loadFireWeatherAlerts();
   await loadUnitsSafely();
+  await initializeRelatedData();
+  await hydrateRelatedPlanningData();
   buildSensitiveAreaGraphics();
   renderAll();
   await alertsPromise;
@@ -285,7 +453,7 @@ async function initialize() {
 function cacheDom() {
   const ids = [
     "app", "appTitle", "appSubtitle", "brandLogo", "refreshButton", "lastUpdated", "accountButton",
-    "map", "operations-panel", "operationsPanelToggle", "operationsPanelArrow", "operationsPanelToggleText", "demoBanner", "dataModeBadge",
+    "map", "operations-panel", "operationsPanelResizer", "operationsPanelToggle", "operationsPanelArrow", "operationsPanelToggleText", "demoBanner", "dataModeBadge",
     "mapToolsToggle", "mapToolsDrawer", "closeMapTools",
     "identifyEmpty", "identifyContent", "identifyName", "identifyScore", "identifyDetails",
     "identifyConditions", "manageSelectedUnit", "updateSelectedForecast", "clearMapSelectionButton", "drawSquareButton",
@@ -311,10 +479,13 @@ function cacheDom() {
     "unitFuel", "unitIgnition", "unitObjective", "unitNotes", "conditionsDialog",
     "conditionsForm", "conditionsFields", "eventDialog", "eventForm", "eventDialogTitle", "eventId",
     "plannedBurnDate", "actualBurnDate", "burnCanceled", "treatmentType", "plannedAcres",
-    "actualAcres", "eventNotes", "actualWeatherFields", "confirmDialog", "confirmTitle",
-    "confirmMessage", "confirmCancel", "confirmAction", "liveRegion", "spotForecastDashboardLink",
-    "nwsFireWeatherLink", "watchDutyLink", "burnProLink", "spotForecastUnitLink", "pointForecastLink",
-    "fireWeatherDashboardUnitLink", "spotForecastPlannerLink", "forecastOfficeLink", "accountDialog", "accountStatus", "accountUser", "arcgisSignInButton", "logoutButton"
+    "actualAcres", "eventBurnBoss", "eventPermitRef", "eventSpotForecastId", "eventSpotForecastUrl",
+    "eventIntensityClass", "eventCoveragePct", "eventEffectiveness", "eventFollowUp", "eventSmokeNotes",
+    "eventNotes", "actualWeatherFields", "confirmDialog", "confirmTitle", "confirmMessage", "confirmCancel",
+    "confirmAction", "liveRegion", "spotForecastDashboardLink", "nwsFireWeatherLink", "watchDutyLink",
+    "burnProLink", "spotForecastUnitLink", "pointForecastLink", "fireWeatherDashboardUnitLink",
+    "spotForecastPlannerLink", "forecastOfficeLink", "accountDialog", "accountStatus", "accountUser",
+    "relatedDataStatus", "relatedDataDetail", "downloadReportDataButton", "arcgisSignInButton", "logoutButton"
   ];
 
   for (const id of ids) dom[id] = document.getElementById(id);
@@ -547,21 +718,17 @@ function configureMapAccessibility() {
 }
 
 function configureMapPopupBehavior() {
-  // This application presents selected-feature details in the accessible Map
-  // Tools drawer. Disable the ArcGIS default popup so it cannot cover the
-  // drawer, map controls, or operational side panel.
-  state.mapElement.popupDisabled = true;
+  // Allow Web Map feature-layer popups to open normally.
+  state.mapElement.popupDisabled = false;
+
   if (!state.view) return;
-  state.view.popupEnabled = false;
-  try {
-    state.view.closePopup();
-  } catch (error) {
-    console.debug("The ArcGIS popup was not open during initialization.", error);
-  }
-  try {
-    state.view.popup = null;
-  } catch (error) {
-    console.debug("The ArcGIS popup instance could not be cleared.", error);
+
+  state.view.popupEnabled = true;
+
+  // If a previous configuration explicitly set the popup to null,
+  // restore the default popup configuration.
+  if (state.view.popup === null) {
+    state.view.popup = {};
   }
 }
 
@@ -712,29 +879,79 @@ function initializeSketch() {
 function initializeMapInteractions() {
   state.view.on("click", async (event) => {
     if (state.drawingMode === "polygon") return;
+
     if (state.drawingMode === "square") {
       createSimpleSquare(event.mapPoint);
       return;
     }
 
     const response = await state.view.hitTest(event);
-    const hit = response.results.find((result) => {
+
+    // --------------------------------------------------------
+    // 1. Check the application's custom prescribed-burn overlay.
+    // --------------------------------------------------------
+    const burnHit = response.results.find((result) => {
       const graphic = result.graphic;
-      return graphic?.attributes?.layerType === "burn" || graphic?.attributes?.layerType === "burn-marker";
+
+      return (
+        graphic?.attributes?.layerType === "burn" ||
+        graphic?.attributes?.layerType === "burn-marker"
+      );
     });
 
-    if (hit) {
-      const id = hit.graphic.attributes.unitId;
-      await selectUnit(id, { zoom: true, openPanel: false });
+    if (burnHit) {
+      const id = burnHit.graphic.attributes.unitId;
+
+      await selectUnit(id, {
+        zoom: true,
+        openPanel: false
+      });
+
       activateMapTool("identify");
       return;
     }
 
+    // --------------------------------------------------------
+    // 2. Check whether the user clicked a popup-enabled
+    //    FeatureLayer from the Web Map.
+    //
+    //    If so, let ArcGIS handle the popup automatically
+    //    and DO NOT start a point-forecast request.
+    // --------------------------------------------------------
+    const featureLayerHit = response.results.find((result) => {
+      const graphic = result.graphic;
+      const layer = graphic?.layer;
+
+      if (!graphic || !layer) return false;
+
+      // Ignore temporary application graphics.
+      if (graphic.attributes?.layerType) return false;
+
+      // Only intercept actual FeatureLayers.
+      if (layer.type !== "feature") return false;
+
+      // Respect the popup setting saved in the Web Map.
+      return layer.popupEnabled !== false;
+    });
+
+    if (featureLayerHit) {
+      // ArcGIS automatically opens the Web Map popup because
+      // view.popupEnabled = true.
+      return;
+    }
+
+    // --------------------------------------------------------
+    // 3. Empty map click = point forecast.
+    // --------------------------------------------------------
     const point = event.mapPoint;
+
     if (point) {
-      // A point forecast becomes the active map selection. Clear prior map
-      // selection state without touching an unfinished burn-unit sketch.
-      clearMapSelection({ clearForecast: true, announceChange: false, preservePanel: true });
+      clearMapSelection({
+        clearForecast: true,
+        announceChange: false,
+        preservePanel: true
+      });
+
       await selectWeatherLocation(point, true);
     }
   });
@@ -794,7 +1011,7 @@ async function loadUnits() {
     populateUnitFormOptions();
     populateBurnFilterOptions();
     state.isDemo = false;
-    setDataMode("Live ArcGIS layer", false);
+    setDataMode("Live Layer", false);
     dom.demoBanner.hidden = true;
     return;
   }
@@ -834,7 +1051,7 @@ async function resolveSourceBurnLayer() {
     if (mapLayer) {
       await mapLayer.load();
       state.sourceLayerInWebMap = true;
-      mapLayer.popupEnabled = false;
+      mapLayer.popupEnabled = true;
       mapLayer.listMode = "show";
       mapLayer.visible = false;
       reconcileBurnFieldMap(mapLayer);
@@ -923,6 +1140,1166 @@ async function resolveFeatureLayerUrl(serviceUrl, configuredLayerId, preferredTi
     `The prescribed-burn service contains ${layers.length || "multiple"} layers. Set prescribedBurns.layerId in config.js or provide a URL ending in /FeatureServer/<layer id>.`
   );
 }
+
+/* --------------------------------------------------------------------------
+ * Related-table persistence — v3.9
+ * Schema reviewed from CVD_PrescribedFire_StagingMap_FL.gdb.
+ * -------------------------------------------------------------------------- */
+
+function getRelatedDataConfig() {
+  return CONFIG.relatedData || {};
+}
+
+function normalizeGuid(value) {
+  return String(value || "").trim().replace(/[{}]/g, "").toUpperCase();
+}
+
+function canonicalServiceName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function escapeSqlLiteral(value) {
+  return String(value ?? "").replace(/'/g, "''");
+}
+
+function guidWhere(fieldName, guid) {
+  const token = normalizeGuid(guid);
+  if (!token) return "1=0";
+  // ArcGIS GUID/GlobalID SQL literals are most consistently handled in
+  // canonical brace form, regardless of whether the source attribute
+  // arrived with or without braces.
+  return `${fieldName} = '${escapeSqlLiteral(`{${token}}`)}'`;
+}
+
+function featureServiceRootFromUrl(url) {
+  const clean = String(url || "").replace(/\/$/, "");
+  const match = clean.match(/^(.*\/FeatureServer)(?:\/\d+)?$/i);
+  return match ? match[1] : clean;
+}
+
+function setRelatedDataStatus(status, detail = "") {
+  if (dom.relatedDataStatus) dom.relatedDataStatus.textContent = status;
+  if (dom.relatedDataDetail && detail) dom.relatedDataDetail.textContent = detail;
+}
+
+function relatedTable(key) {
+  return state.related.tables[key] || null;
+}
+
+async function initializeRelatedData() {
+  const config = getRelatedDataConfig();
+  state.related.initialized = true;
+  state.related.available = false;
+  state.related.tables = {};
+  state.related.tableMetadata = {};
+  state.related.errors = [];
+  state.related.loadedUnitIds.clear();
+
+  if (!config.enabled || state.isDemo || !state.sourceLayer) {
+    setRelatedDataStatus("Not configured", "Related-table storage is disabled or the authoritative burn layer is unavailable.");
+    return false;
+  }
+
+  // The related tables belong to the authoritative staging FeatureServer.
+  // Prefer an explicitly configured service root, then the configured
+  // prescribed-burn service URL. A web-map layer can be a hosted view that
+  // does not expose the parent service's related tables, so it is only the
+  // final fallback.
+  const sourceUrl = config.serviceRoot
+    || CONFIG.prescribedBurns?.serviceUrl
+    || state.sourceLayer.url;
+  const serviceRoot = featureServiceRootFromUrl(sourceUrl);
+  if (!serviceRoot || !/\/FeatureServer$/i.test(serviceRoot)) {
+    setRelatedDataStatus("Unavailable", "The feature-service root could not be derived from the configured RxBurns_Poly service.");
+    return false;
+  }
+
+  state.related.serviceRoot = serviceRoot;
+  setRelatedDataStatus("Connecting…", "Discovering the related tables published with RxBurns_Poly.");
+
+  try {
+    const response = await state.modules.esriRequest(serviceRoot, {
+      query: { f: "json" },
+      responseType: "json"
+    });
+    const metadata = response.data || {};
+    if (metadata.error) throw new Error(metadata.error.message || "Feature-service metadata could not be read.");
+
+    const serviceTables = Array.isArray(metadata.tables) ? metadata.tables : [];
+    const configuredNames = config.tableNames || {};
+    const configuredIds = config.tableIds || {};
+    const { FeatureLayer } = state.modules;
+
+    for (const [key, configuredName] of Object.entries(configuredNames)) {
+      const expectedId = Number(configuredIds[key]);
+      const wantedName = canonicalServiceName(configuredName);
+      let tableInfo = Number.isInteger(expectedId)
+        ? serviceTables.find((entry) => Number(entry.id) === expectedId)
+        : null;
+
+      if (!tableInfo) {
+        tableInfo = serviceTables.find((entry) => canonicalServiceName(entry.name) === wantedName);
+      }
+
+      if (!tableInfo) {
+        state.related.errors.push(
+          `Missing table: ${configuredName}${Number.isInteger(expectedId) ? ` (expected ID ${expectedId})` : ""}`
+        );
+        continue;
+      }
+
+      try {
+        const table = new FeatureLayer({
+          url: `${serviceRoot}/${tableInfo.id}`,
+          title: tableInfo.name,
+          outFields: ["*"]
+        });
+        await table.load();
+        state.related.tables[key] = table;
+        state.related.tableMetadata[key] = {
+          id: tableInfo.id,
+          name: tableInfo.name,
+          configuredName,
+          url: table.url,
+          canAdd: table.capabilities?.operations?.supportsAdd !== false,
+          canUpdate: table.capabilities?.operations?.supportsUpdate !== false,
+          canDelete: table.capabilities?.operations?.supportsDelete === true
+        };
+      } catch (tableError) {
+        console.error(`Related table '${configuredName}' could not be loaded.`, tableError);
+        state.related.errors.push(`${configuredName}: ${safeText(tableError.message, "load failed")}`);
+      }
+    }
+
+    const loadedKeys = Object.keys(state.related.tables);
+    const expectedCount = Object.keys(configuredNames).length;
+    state.related.available = loadedKeys.length > 0;
+
+    const mapping = Object.entries(state.related.tableMetadata).map(([key, info]) => ({
+      key,
+      id: info.id,
+      name: info.name,
+      url: info.url,
+      canAdd: info.canAdd,
+      canUpdate: info.canUpdate
+    }));
+    console.info("Related-table mapping", mapping);
+
+    const status = loadedKeys.length === expectedCount
+      ? `Connected (${loadedKeys.length}/${expectedCount})`
+      : loadedKeys.length
+        ? `Partial (${loadedKeys.length}/${expectedCount})`
+        : "Unavailable";
+    const detail = state.related.errors.length
+      ? `FeatureServer: ${serviceRoot}. ${state.related.errors.join("; ")}.`
+      : `FeatureServer: ${serviceRoot}. Tables: ${mapping.map((item) => `${item.name} [${item.id}]`).join(", ")}.`;
+    setRelatedDataStatus(status, detail);
+    return state.related.available;
+  } catch (error) {
+    console.error("Related tables could not be initialized.", error);
+    state.related.errors.push(safeText(error.message, "Related-table initialization failed."));
+    setRelatedDataStatus("Unavailable", safeText(error.message, "Related-table initialization failed."));
+    return false;
+  }
+}
+
+async function queryAllTableFeatures(table, where = "1=1") {
+  if (!table) return [];
+  const idQuery = table.createQuery();
+  idQuery.where = where;
+  let objectIds = [];
+  try {
+    objectIds = await table.queryObjectIds(idQuery) || [];
+  } catch (error) {
+    console.warn(`Object-ID query failed for ${table.title}; falling back to a standard query.`, error);
+    const query = table.createQuery();
+    query.where = where;
+    query.outFields = ["*"];
+    query.returnGeometry = false;
+    return (await table.queryFeatures(query)).features || [];
+  }
+
+  if (!objectIds.length) return [];
+  const results = [];
+  const batchSize = 500;
+  for (let index = 0; index < objectIds.length; index += batchSize) {
+    const query = table.createQuery();
+    query.objectIds = objectIds.slice(index, index + batchSize);
+    query.outFields = ["*"];
+    query.returnGeometry = false;
+    const result = await table.queryFeatures(query);
+    results.push(...(result.features || []));
+  }
+  return results;
+}
+
+function tableAttributes(feature) {
+  return { ...(feature?.attributes || {}) };
+}
+
+function unitBySourceGlobalId(guid) {
+  const token = normalizeGuid(guid);
+  return state.units.find((unit) => normalizeGuid(unit.sourceGlobalId) === token) || null;
+}
+
+function preferredFromRelatedAttributes(a = {}) {
+  const range = (useField, minField, maxField) => Number(a[useField]) === 0
+    ? { min: null, max: null }
+    : { min: toNullableNumber(a[minField]), max: toNullableNumber(a[maxField]) };
+  const dirs = (prefix) => DIRECTIONS.filter((direction) => Number(a[`${prefix}_${direction}`]) === 1);
+  return normalizePreferred({
+    temperature: range("USE_TEMP", "TEMP_MIN", "TEMP_MAX"),
+    relativeHumidity: range("USE_RH", "RH_MIN", "RH_MAX"),
+    windSpeed: range("USE_WIND", "WIND_MIN", "WIND_MAX"),
+    windDirection: dirs("SURF"),
+    windGust: range("USE_GUST", "GUST_MIN", "GUST_MAX"),
+    quantitativePrecipitation: range("USE_QPF", "QPF_MIN", "QPF_MAX"),
+    probabilityPrecipitation: range("USE_POP", "POP_MIN", "POP_MAX"),
+    transportWindSpeed: range("USE_TRANS_WIND", "TRANS_WIND_MIN", "TRANS_WIND_MAX"),
+    transportWindDirection: dirs("TRANS"),
+    dispersionIndex: range("USE_DI", "DI_MIN", "DI_MAX"),
+    mixingHeight: range("USE_MIX_HT", "MIX_HT_MIN", "MIX_HT_MAX"),
+    lvori: range("USE_LVORI", "LVORI_MIN", "LVORI_MAX")
+  });
+}
+
+function chooseCurrentPrescription(features) {
+  const rows = features.map((feature) => ({ feature, a: feature.attributes || {} }));
+  rows.sort((left, right) => {
+    const leftActive = normalize(left.a.RECORD_STATUS) === "active" ? 1 : 0;
+    const rightActive = normalize(right.a.RECORD_STATUS) === "active" ? 1 : 0;
+    if (leftActive !== rightActive) return rightActive - leftActive;
+    const versionDifference = Number(right.a.VERSION_NO || 0) - Number(left.a.VERSION_NO || 0);
+    if (versionDifference) return versionDifference;
+    return Number(toDate(right.a.EditDate)?.getTime() || 0) - Number(toDate(left.a.EditDate)?.getTime() || 0);
+  });
+  return rows[0]?.feature || null;
+}
+
+function relatedForecastPeriodToDaily(a = {}) {
+  const windMin = toNullableNumber(a.WIND_MIN_MPH);
+  const windMax = toNullableNumber(a.WIND_MAX_MPH);
+  const gustMin = toNullableNumber(a.GUST_MIN_MPH);
+  const gustMax = toNullableNumber(a.GUST_MAX_MPH);
+  const windText = windMin == null && windMax == null
+    ? ""
+    : windMin != null && windMax != null && windMin !== windMax
+      ? `${windMin}-${windMax} mph`
+      : `${windMax ?? windMin} mph`;
+  const gustText = gustMin == null && gustMax == null
+    ? ""
+    : gustMin != null && gustMax != null && gustMin !== gustMax
+      ? `${gustMin}-${gustMax} mph`
+      : `${gustMax ?? gustMin} mph`;
+  return {
+    name: a.PERIOD_NAME || "Forecast period",
+    startTime: a.VALID_START,
+    endTime: a.VALID_END,
+    isDaytime: Number(a.IS_DAYTIME) !== 0,
+    shortForecast: a.SHORT_FORECAST || "",
+    temperature: toNullableNumber(a.TEMP_F),
+    temperatureUnit: "F",
+    relativeHumidity: { value: toNullableNumber(a.RH_PCT) },
+    windSpeed: windText,
+    windDirection: a.WIND_DIR || "",
+    windGust: gustText,
+    probabilityOfPrecipitation: { value: toNullableNumber(a.POP_PCT) },
+    grid: {
+      windGust: gustMax ?? gustMin,
+      quantitativePrecipitation: toNullableNumber(a.QPF_IN),
+      transportWindSpeed: toNullableNumber(a.TRANS_WIND_MAX ?? a.TRANS_WIND_MIN),
+      transportWindDirection: a.TRANS_WIND_DIR || null,
+      mixingHeight: toNullableNumber(a.MIX_HT_FT),
+      atmosphericDispersionIndex: toNullableNumber(a.DI_VALUE),
+      lvori: toNullableNumber(a.LVORI_VALUE)
+    },
+    relatedScore: toNullableNumber(a.SCORE_PCT),
+    relatedScoreClass: a.SCORE_CLASS || null,
+    relatedGlobalId: a.GlobalID || null
+  };
+}
+
+async function hydrateRelatedPlanningData() {
+  if (!state.related.available) return;
+
+  try {
+    const prescriptionTable = relatedTable("weatherPrescriptions");
+    if (prescriptionTable) {
+      const prescriptions = await queryAllTableFeatures(prescriptionTable);
+      const byBurn = new Map();
+      for (const feature of prescriptions) {
+        const key = normalizeGuid(feature.attributes?.BURNUNIT_GUID);
+        if (!key) continue;
+        if (!byBurn.has(key)) byBurn.set(key, []);
+        byBurn.get(key).push(feature);
+      }
+      for (const [guid, features] of byBurn.entries()) {
+        const unit = unitBySourceGlobalId(guid);
+        const current = chooseCurrentPrescription(features);
+        if (!unit || !current) continue;
+        unit.preferred = preferredFromRelatedAttributes(current.attributes);
+        unit.related = unit.related || {};
+        unit.related.weatherPrescription = relatedRecordIdentity(prescriptionTable, current);
+      }
+    }
+
+    if (getRelatedDataConfig().loadLatestForecastScoresOnStart !== false) {
+      const runsTable = relatedTable("forecastRuns");
+      const periodsTable = relatedTable("forecastPeriods");
+      if (runsTable && periodsTable) {
+        const [runs, periods] = await Promise.all([
+          queryAllTableFeatures(runsTable),
+          queryAllTableFeatures(periodsTable)
+        ]);
+        const latestRunByBurn = new Map();
+        for (const feature of runs) {
+          const a = feature.attributes || {};
+          const burnKey = normalizeGuid(a.BURNUNIT_GUID);
+          if (!burnKey) continue;
+          const previous = latestRunByBurn.get(burnKey);
+          const currentTime = Number(toDate(a.REQUESTED_UTC)?.getTime() || toDate(a.CreationDate)?.getTime() || 0);
+          const previousTime = Number(toDate(previous?.attributes?.REQUESTED_UTC)?.getTime() || toDate(previous?.attributes?.CreationDate)?.getTime() || 0);
+          if (!previous || currentTime >= previousTime) latestRunByBurn.set(burnKey, feature);
+        }
+        const periodsByRun = new Map();
+        for (const feature of periods) {
+          const runKey = normalizeGuid(feature.attributes?.FORECASTRUN_GUID);
+          if (!runKey) continue;
+          if (!periodsByRun.has(runKey)) periodsByRun.set(runKey, []);
+          periodsByRun.get(runKey).push(feature);
+        }
+        for (const [burnKey, runFeature] of latestRunByBurn.entries()) {
+          const unit = unitBySourceGlobalId(burnKey);
+          if (!unit) continue;
+          applyRelatedForecastToUnit(unit, runFeature, periodsByRun.get(normalizeGuid(runFeature.attributes?.GlobalID)) || []);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("Initial related planning data could not be hydrated.", error);
+    state.related.errors.push(safeText(error.message, "Planning-data hydration failed."));
+  }
+}
+
+function applyRelatedForecastToUnit(unit, runFeature, periodFeatures) {
+  const run = runFeature?.attributes || {};
+  const daily = periodFeatures
+    .map((feature) => feature.attributes || {})
+    .filter((a) => !a.PERIOD_TYPE || normalize(a.PERIOD_TYPE) === "daily")
+    .sort((a, b) => Number(a.PERIOD_INDEX || 0) - Number(b.PERIOD_INDEX || 0))
+    .map(relatedForecastPeriodToDaily)
+    .slice(0, 7);
+  if (!daily.length) return;
+
+  const scores = daily.map((period) => period.relatedScore);
+  while (scores.length < 7) scores.push(null);
+  unit.forecastScores = scores.slice(0, 7);
+  state.forecastCache.set(unit.id, {
+    latitude: Number(run.POINT_LAT ?? unit.latitude),
+    longitude: Number(run.POINT_LON ?? unit.longitude),
+    pointData: null,
+    hourly: [],
+    daily,
+    updated: run.REQUESTED_UTC || run.EditDate || run.CreationDate || new Date().toISOString(),
+    persisted: true
+  });
+  unit.related = unit.related || {};
+  unit.related.latestForecastRun = relatedRecordIdentity(relatedTable("forecastRuns"), runFeature);
+}
+
+async function loadRelatedDataForUnit(unit, { force = false } = {}) {
+  if (!state.related.available || !unit?.sourceGlobalId) return;
+  const burnKey = normalizeGuid(unit.sourceGlobalId);
+  if (!burnKey || (!force && state.related.loadedUnitIds.has(burnKey))) return;
+
+  const tasks = [
+    loadPrescriptionForUnit(unit),
+    loadLatestForecastForUnit(unit),
+    loadBurnEventsForUnit(unit),
+    loadSubscribersForUnit(unit)
+  ];
+  const results = await Promise.allSettled(tasks);
+  for (const result of results) {
+    if (result.status === "rejected") console.warn("Related unit data could not be loaded.", result.reason);
+  }
+  state.related.loadedUnitIds.add(burnKey);
+}
+
+async function loadPrescriptionForUnit(unit) {
+  const table = relatedTable("weatherPrescriptions");
+  if (!table || !unit.sourceGlobalId) return;
+  const features = await queryAllTableFeatures(table, guidWhere("BURNUNIT_GUID", unit.sourceGlobalId));
+  const current = chooseCurrentPrescription(features);
+  if (!current) return;
+  unit.preferred = preferredFromRelatedAttributes(current.attributes);
+  unit.related = unit.related || {};
+  unit.related.weatherPrescription = relatedRecordIdentity(table, current);
+}
+
+async function loadLatestForecastForUnit(unit) {
+  const runsTable = relatedTable("forecastRuns");
+  const periodsTable = relatedTable("forecastPeriods");
+  if (!runsTable || !periodsTable || !unit.sourceGlobalId) return;
+  const runs = await queryAllTableFeatures(runsTable, guidWhere("BURNUNIT_GUID", unit.sourceGlobalId));
+  if (!runs.length) return;
+  runs.sort((a, b) => Number(toDate(b.attributes?.REQUESTED_UTC)?.getTime() || 0) - Number(toDate(a.attributes?.REQUESTED_UTC)?.getTime() || 0));
+  const latest = runs[0];
+  const runGuid = latest.attributes?.GlobalID;
+  if (!runGuid) return;
+  const periods = await queryAllTableFeatures(periodsTable, guidWhere("FORECASTRUN_GUID", runGuid));
+  applyRelatedForecastToUnit(unit, latest, periods);
+}
+
+async function loadBurnEventsForUnit(unit) {
+  const eventTable = relatedTable("burnEvents");
+  const weatherTable = relatedTable("actualWeather");
+  if (!eventTable || !unit.sourceGlobalId) return;
+  const [eventFeatures, weatherFeatures] = await Promise.all([
+    queryAllTableFeatures(eventTable, guidWhere("BURNUNIT_GUID", unit.sourceGlobalId)),
+    weatherTable ? queryAllTableFeatures(weatherTable, guidWhere("BURNUNIT_GUID", unit.sourceGlobalId)) : Promise.resolve([])
+  ]);
+  const weatherByEvent = new Map();
+  for (const feature of weatherFeatures) {
+    const key = normalizeGuid(feature.attributes?.BURNEVENT_GUID);
+    if (!key) continue;
+    if (!weatherByEvent.has(key)) weatherByEvent.set(key, []);
+    weatherByEvent.get(key).push(feature);
+  }
+  unit.events = eventFeatures.map((feature) => eventFromRelatedFeature(eventTable, feature, weatherByEvent));
+}
+
+function eventFromRelatedFeature(table, feature, weatherByEvent) {
+  const a = feature.attributes || {};
+  const eventGuid = a.GlobalID;
+  const weatherFeature = (weatherByEvent.get(normalizeGuid(eventGuid)) || [])
+    .sort((left, right) => Number(toDate(right.attributes?.OBS_TIME)?.getTime() || 0) - Number(toDate(left.attributes?.OBS_TIME)?.getTime() || 0))[0];
+  const w = weatherFeature?.attributes || {};
+  return {
+    id: eventGuid || String(a[table.objectIdField]),
+    sourceObjectId: a[table.objectIdField] ?? null,
+    sourceGlobalId: eventGuid || null,
+    actualWeatherObjectId: weatherFeature ? w[relatedTable("actualWeather")?.objectIdField] : null,
+    actualWeatherGlobalId: w.GlobalID || null,
+    plannedDate: toDateInputValue(a.PLANNED_DATE),
+    actualDate: toDateInputValue(a.ACTUAL_DATE),
+    canceled: Number(a.BURN_CANCELED) === 1 || normalize(a.EVENT_STATUS) === "canceled",
+    treatmentType: treatmentTypeName(a.TREATMENT_TYPE),
+    plannedAcres: toNullableNumber(a.PLANNED_ACRES),
+    actualAcres: toNullableNumber(a.ACTUAL_ACRES),
+    burnBoss: a.BURN_BOSS || "",
+    permitRef: a.PERMIT_REF || "",
+    spotForecastId: a.SPOT_FORECAST_ID || "",
+    spotForecastUrl: a.SPOT_FORECAST_URL || "",
+    intensityClass: a.INTENSITY_CLASS || "",
+    coveragePct: toNullableNumber(a.COVERAGE_PCT),
+    effectiveness: a.EFFECTIVENESS || "",
+    followUp: a.FOLLOW_UP || "",
+    smokeNotes: a.SMOKE_NOTES || "",
+    notes: a.EVENT_NOTES || "",
+    actualWeather: actualWeatherFromRelatedAttributes(w)
+  };
+}
+
+async function loadSubscribersForUnit(unit) {
+  const table = relatedTable("notificationSubscriptions");
+  if (!table || !unit.sourceGlobalId) return;
+  const features = await queryAllTableFeatures(table, guidWhere("BURNUNIT_GUID", unit.sourceGlobalId));
+  unit.subscribers = features
+    .filter((feature) => Number(feature.attributes?.IS_ACTIVE) !== 0)
+    .map((feature) => {
+      const a = feature.attributes || {};
+      return {
+        id: a.GlobalID || String(a[table.objectIdField]),
+        sourceObjectId: a[table.objectIdField] ?? null,
+        sourceGlobalId: a.GlobalID || null,
+        username: a.AGO_USERNAME || "",
+        name: a.SUBSCRIBER_NAME || "",
+        email: a.EMAIL_ADDRESS || "",
+        deliveryEnabled: Number(a.DELIVERY_ENABLED) === 1,
+        triggerClass: a.TRIGGER_CLASS || "HIGH",
+        minScore: toNullableNumber(a.MIN_SCORE_PCT),
+        leadHours: toNullableNumber(a.LEAD_HOURS)
+      };
+    });
+  unit.notificationsEnabled = unit.subscribers.some((subscriber) => subscriber.deliveryEnabled);
+}
+
+function relatedRecordIdentity(table, feature) {
+  const a = feature?.attributes || {};
+  return {
+    objectId: table ? a[table.objectIdField] ?? null : null,
+    globalId: a.GlobalID || null,
+    versionNo: toNullableNumber(a.VERSION_NO),
+    effectiveFrom: a.EFFECTIVE_FROM || null
+  };
+}
+
+function nullableString(value) {
+  return value == null ? "" : String(value);
+}
+
+function parseProbabilityPrecipitationFromNotes(value) {
+  const text = String(value || "");
+  const match = text.match(
+    /Probability of precipitation entered in the web app:\s*([0-9]+(?:\.[0-9]+)?)%\.?(?:\s*The provided Actual_Weather_and_Fire_Behavior schema does not include a POP_PCT field\.)?/i
+  );
+  return {
+    probabilityPrecipitation: match?.[1] || "",
+    observationNotes: match ? text.replace(match[0], "").trim() : text.trim()
+  };
+}
+
+function actualWeatherFromRelatedAttributes(attributes = {}) {
+  const parsedNotes = parseProbabilityPrecipitationFromNotes(attributes.OBS_NOTES);
+  return {
+    temperature: nullableString(attributes.TEMP_F),
+    relativeHumidity: nullableString(attributes.RH_PCT),
+    windSpeed: nullableString(attributes.WIND_MPH),
+    windDirection: attributes.WIND_DIR || "",
+    windGust: nullableString(attributes.GUST_MPH),
+    quantitativePrecipitation: nullableString(attributes.QPF_IN),
+    probabilityPrecipitation: parsedNotes.probabilityPrecipitation,
+    transportWindSpeed: nullableString(attributes.TRANS_WIND_MPH),
+    transportWindDirection: attributes.TRANS_WIND_DIR || "",
+    dispersionIndex: nullableString(attributes.DI_VALUE),
+    mixingHeight: nullableString(attributes.MIX_HT_FT),
+    lvori: nullableString(attributes.LVORI_VALUE),
+    flameLength: nullableString(attributes.FLAME_LENGTH_FT),
+    rateOfSpread: nullableString(attributes.ROS_FT_MIN),
+    smokeDirection: attributes.SMOKE_DIR || "",
+    smokeBehavior: attributes.SMOKE_BEHAVIOR || "",
+    observationNotes: parsedNotes.observationNotes
+  };
+}
+
+function toDateInputValue(value) {
+  const date = toDate(value);
+  if (!date) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function treatmentTypeCode(value) {
+  const token = normalize(value).replace(/[^a-z0-9]+/g, "_");
+  if (token.includes("broadcast")) return "BROADCAST";
+  if (token.includes("machine")) return "MACHINE_PILE";
+  if (token.includes("hand")) return "HAND_PILE";
+  return value || null;
+}
+
+function treatmentTypeName(value) {
+  const token = String(value || "").toUpperCase();
+  if (token === "BROADCAST") return "Broadcast Burn";
+  if (token === "MACHINE_PILE") return "Machine Pile Burn";
+  if (token === "HAND_PILE") return "Hand Pile Burn";
+  return value || "";
+}
+
+function activeRangeFlag(range) {
+  return range && (range.min != null || range.max != null) ? 1 : 0;
+}
+
+function preferredToRelatedAttributes(unit) {
+  const p = unit.preferred;
+  const current = unit.related?.weatherPrescription || {};
+  const attrs = {
+    BURNUNIT_GUID: unit.sourceGlobalId,
+    PRESC_NAME: "Current Burn Prescription",
+    VERSION_NO: current.versionNo || 1,
+    RECORD_STATUS: "ACTIVE",
+    EFFECTIVE_FROM: current.effectiveFrom || new Date(),
+    EFFECTIVE_TO: null,
+    USE_TEMP: activeRangeFlag(p.temperature), TEMP_MIN: p.temperature.min, TEMP_MAX: p.temperature.max,
+    USE_RH: activeRangeFlag(p.relativeHumidity), RH_MIN: p.relativeHumidity.min, RH_MAX: p.relativeHumidity.max,
+    USE_WIND: activeRangeFlag(p.windSpeed), WIND_MIN: p.windSpeed.min, WIND_MAX: p.windSpeed.max,
+    USE_GUST: activeRangeFlag(p.windGust), GUST_MIN: p.windGust.min, GUST_MAX: p.windGust.max,
+    USE_QPF: activeRangeFlag(p.quantitativePrecipitation), QPF_MIN: p.quantitativePrecipitation.min, QPF_MAX: p.quantitativePrecipitation.max,
+    USE_POP: activeRangeFlag(p.probabilityPrecipitation), POP_MIN: p.probabilityPrecipitation.min, POP_MAX: p.probabilityPrecipitation.max,
+    USE_TRANS_WIND: activeRangeFlag(p.transportWindSpeed), TRANS_WIND_MIN: p.transportWindSpeed.min, TRANS_WIND_MAX: p.transportWindSpeed.max,
+    USE_DI: activeRangeFlag(p.dispersionIndex), DI_MIN: p.dispersionIndex.min, DI_MAX: p.dispersionIndex.max,
+    USE_MIX_HT: activeRangeFlag(p.mixingHeight), MIX_HT_MIN: p.mixingHeight.min, MIX_HT_MAX: p.mixingHeight.max,
+    USE_LVORI: activeRangeFlag(p.lvori), LVORI_MIN: p.lvori.min, LVORI_MAX: p.lvori.max,
+    SCORE_HIGH_MIN: 75,
+    SCORE_MED_MIN: 40,
+    NOTES: unit.notes || null
+  };
+  for (const direction of DIRECTIONS) {
+    attrs[`SURF_${direction}`] = p.windDirection.includes(direction) ? 1 : 0;
+    attrs[`TRANS_${direction}`] = p.transportWindDirection.includes(direction) ? 1 : 0;
+  }
+  return attrs;
+}
+
+function ensureRelatedEditAllowed(key, operation = "add") {
+  const config = getRelatedDataConfig();
+  if (!config.enabled) {
+    throw new Error("Related-table storage is disabled in config.js.");
+  }
+  if (!state.related.initialized || !state.related.available) {
+    const detail = state.related.errors.length ? ` ${state.related.errors.join("; ")}.` : "";
+    throw new Error(`Related-table storage is not connected.${detail} Open the Account dialog and verify a 7/7 connection before saving.`);
+  }
+
+  const table = relatedTable(key);
+  const configuredName = config.tableNames?.[key] || key;
+  if (!table) {
+    throw new Error(`Required related table '${configuredName}' is not available in ${state.related.serviceRoot || "the configured FeatureServer"}.`);
+  }
+  if (config.requireOAuthForEdits !== false && state.authMode !== "oauth") {
+    throw new Error("Related-table edits require ArcGIS OAuth user authentication.");
+  }
+  if (config.requireOAuthForEdits !== false && !state.credential) {
+    throw new Error("Sign in with an authorized California State Parks ArcGIS Online account before editing related records.");
+  }
+
+  const operations = table.capabilities?.operations || {};
+  if (operation === "add" && operations.supportsAdd === false) {
+    throw new Error(`${table.title} does not permit adding records for the signed-in user.`);
+  }
+  if (operation === "update" && operations.supportsUpdate === false) {
+    throw new Error(`${table.title} does not permit updating records for the signed-in user.`);
+  }
+  return table;
+}
+
+function attributesForRelatedTable(table, attributes) {
+  const fields = new Map((table.fields || []).map((field) => [field.name, field]));
+  const cleaned = {};
+  for (const [name, value] of Object.entries(attributes || {})) {
+    const field = fields.get(name);
+    if (!field || field.editable === false) continue;
+    cleaned[name] = coerceValueForArcGISField(field, value);
+  }
+  return cleaned;
+}
+
+async function applyRelatedRecord(key, attributes, identity = null) {
+  const isUpdate = identity?.objectId != null;
+  const table = ensureRelatedEditAllowed(key, isUpdate ? "update" : "add");
+  const { Graphic } = state.modules;
+  const attrs = attributesForRelatedTable(table, attributes);
+  if (isUpdate) attrs[table.objectIdField] = identity.objectId;
+
+  const graphic = new Graphic({ attributes: attrs });
+  const result = await table.applyEdits(
+    isUpdate ? { updateFeatures: [graphic] } : { addFeatures: [graphic] }
+  );
+  const editResult = isUpdate ? result.updateFeatureResults?.[0] : result.addFeatureResults?.[0];
+  if (!editResult || editResult.error) {
+    const details = editResult?.error?.details?.length ? ` ${editResult.error.details.join("; ")}` : "";
+    throw new Error(`${editResult?.error?.message || `ArcGIS rejected the ${key} edit.`}${details}`);
+  }
+
+  const objectId = editResult.objectId ?? identity?.objectId ?? null;
+  if (objectId == null) throw new Error(`${table.title} returned no ObjectID after the edit.`);
+
+  // Verify the record from the service before reporting success. This prevents
+  // the UI from showing a record that only exists in browser memory.
+  const query = table.createQuery();
+  query.objectIds = [objectId];
+  query.outFields = ["*"];
+  query.returnGeometry = false;
+  const queryResult = await table.queryFeatures(query);
+  const savedFeature = queryResult.features?.[0];
+  if (!savedFeature) {
+    throw new Error(`${table.title} reported a successful edit, but the saved record could not be read back from ArcGIS Online.`);
+  }
+
+  const globalIdField = table.globalIdField || "GlobalID";
+  const globalId = savedFeature.attributes?.[globalIdField]
+    ?? editResult.globalId
+    ?? identity?.globalId
+    ?? null;
+  return { objectId, globalId, attributes: savedFeature.attributes || {} };
+}
+
+async function applyRelatedAdds(key, attributeRows) {
+  const table = ensureRelatedEditAllowed(key, "add");
+  const { Graphic } = state.modules;
+  if (!attributeRows.length) return [];
+  const addFeatures = attributeRows.map((attributes) => new Graphic({ attributes: attributesForRelatedTable(table, attributes) }));
+  const result = await table.applyEdits({ addFeatures });
+  const editResults = result.addFeatureResults || [];
+  const error = editResults.find((item) => item.error)?.error;
+  if (error) {
+    const details = error.details?.length ? ` ${error.details.join("; ")}` : "";
+    throw new Error(`${error.message || `ArcGIS rejected one or more ${key} records.`}${details}`);
+  }
+  if (editResults.length !== attributeRows.length) {
+    throw new Error(`${table.title} saved ${editResults.length} of ${attributeRows.length} expected records.`);
+  }
+  return editResults;
+}
+
+async function savePreferredConditionsRelated(unit) {
+  if (!unit.sourceGlobalId) throw new Error("The selected burn unit does not have a GlobalID for the weather-prescription relationship.");
+  ensureRelatedEditAllowed("weatherPrescriptions", unit.related?.weatherPrescription?.objectId != null ? "update" : "add");
+  const identity = unit.related?.weatherPrescription || null;
+  const saved = await applyRelatedRecord("weatherPrescriptions", preferredToRelatedAttributes(unit), identity);
+  unit.related = unit.related || {};
+  unit.related.weatherPrescription = { ...identity, ...saved, versionNo: identity?.versionNo || 1, effectiveFrom: identity?.effectiveFrom || new Date().toISOString() };
+}
+
+function parseWindRange(value) {
+  const matches = String(value || "").match(/-?\d+(?:\.\d+)?/g) || [];
+  const numbers = matches.map(Number).filter(Number.isFinite);
+  if (!numbers.length) return { min: null, max: null };
+  return { min: Math.min(...numbers), max: Math.max(...numbers) };
+}
+
+function scoreClassCode(score) {
+  if (!Number.isFinite(Number(score))) return "UNAVAILABLE";
+  if (Number(score) >= 75) return "HIGH";
+  if (Number(score) >= 40) return "MEDIUM";
+  return "LOW";
+}
+
+function scoreForecastPeriodDetails(period, preferred) {
+  const available = {
+    temperature: Number(period.temperature),
+    relativeHumidity: Number(period.relativeHumidity?.value),
+    windSpeed: parseWindNumber(period.windSpeed),
+    windDirection: period.windDirection,
+    windGust: Number.isFinite(Number(period.grid?.windGust)) ? Number(period.grid.windGust) : parseWindNumber(period.windGust),
+    quantitativePrecipitation: Number(period.grid?.quantitativePrecipitation),
+    probabilityPrecipitation: Number(period.probabilityOfPrecipitation?.value),
+    transportWindSpeed: Number(period.grid?.transportWindSpeed),
+    transportWindDirection: period.grid?.transportWindDirection,
+    mixingHeight: Number(period.grid?.mixingHeight),
+    dispersionIndex: Number(period.grid?.atmosphericDispersionIndex),
+    lvori: Number(period.grid?.lvori)
+  };
+  let evaluated = 0;
+  let matched = 0;
+  const missing = [];
+  for (const key of ["temperature", "relativeHumidity", "windSpeed", "windGust", "quantitativePrecipitation", "probabilityPrecipitation", "transportWindSpeed", "mixingHeight", "dispersionIndex", "lvori"]) {
+    const range = preferred[key];
+    const hasRange = range && (range.min != null || range.max != null);
+    if (!hasRange) continue;
+    const value = available[key];
+    if (!Number.isFinite(value)) { missing.push(key); continue; }
+    evaluated += 1;
+    if ((range.min == null || value >= range.min) && (range.max == null || value <= range.max)) matched += 1;
+  }
+  for (const [key, allowed] of [["windDirection", preferred.windDirection], ["transportWindDirection", preferred.transportWindDirection]]) {
+    if (!allowed?.length) continue;
+    if (!available[key]) { missing.push(key); continue; }
+    evaluated += 1;
+    if (allowed.includes(available[key])) matched += 1;
+  }
+  const score = evaluated ? Math.round((matched / evaluated) * 100) : null;
+  return { evaluated, matched, score, scoreClass: scoreClassCode(score), missing };
+}
+
+async function persistForecastRun(unit, payload) {
+  if (!unit.sourceGlobalId) throw new Error("The selected burn unit does not have a GlobalID for the forecast relationship.");
+  ensureRelatedEditAllowed("forecastRuns", "add");
+  ensureRelatedEditAllowed("forecastPeriods", "add");
+  const pointProperties = payload.pointData?.properties || {};
+  const prescriptionGuid = unit.related?.weatherPrescription?.globalId || null;
+  const run = await applyRelatedRecord("forecastRuns", {
+    BURNUNIT_GUID: unit.sourceGlobalId,
+    PRESCRIPTION_GUID: prescriptionGuid,
+    REQUESTED_UTC: payload.updated || new Date(),
+    ISSUED_UTC: pointProperties.updateTime || null,
+    EXPIRES_UTC: null,
+    SOURCE_TYPE: "NWS_POINT",
+    NWS_OFFICE: pointProperties.cwa || null,
+    GRID_ID: pointProperties.gridId || null,
+    GRID_X: pointProperties.gridX ?? null,
+    GRID_Y: pointProperties.gridY ?? null,
+    POINT_LAT: payload.latitude,
+    POINT_LON: payload.longitude,
+    TIME_ZONE: pointProperties.timeZone || null,
+    FORECAST_URL: pointProperties.forecast || null,
+    GRID_URL: pointProperties.forecastGridData || null,
+    SPOT_URL: CONFIG.externalLinks?.nwsSpotForecastRequest || null,
+    RUN_STATUS: payload.daily?.length ? "COMPLETE" : "PARTIAL",
+    PERIOD_COUNT: payload.daily?.length || 0
+  });
+  if (!run.globalId) throw new Error("The forecast run was added, but its GlobalID could not be resolved.");
+
+  const periodRows = (payload.daily || []).slice(0, 7).map((period, index) => {
+    const wind = parseWindRange(period.windSpeed);
+    const gustValue = Number.isFinite(Number(period.grid?.windGust)) ? Number(period.grid.windGust) : parseWindNumber(period.windGust);
+    const score = scoreForecastPeriodDetails(period, unit.preferred);
+    return {
+      FORECASTRUN_GUID: run.globalId,
+      BURNUNIT_GUID: unit.sourceGlobalId,
+      PRESCRIPTION_GUID: prescriptionGuid,
+      PERIOD_TYPE: "DAILY",
+      PERIOD_INDEX: index + 1,
+      PERIOD_NAME: period.name || `Day ${index + 1}`,
+      VALID_START: period.startTime || null,
+      VALID_END: period.endTime || null,
+      IS_DAYTIME: period.isDaytime === false ? 0 : 1,
+      SHORT_FORECAST: period.shortForecast || null,
+      TEMP_F: toNullableNumber(period.temperature),
+      RH_PCT: toNullableNumber(period.relativeHumidity?.value),
+      WIND_MIN_MPH: wind.min,
+      WIND_MAX_MPH: wind.max,
+      WIND_DIR: period.windDirection || null,
+      GUST_MIN_MPH: Number.isFinite(gustValue) ? gustValue : null,
+      GUST_MAX_MPH: Number.isFinite(gustValue) ? gustValue : null,
+      QPF_IN: toNullableNumber(period.grid?.quantitativePrecipitation),
+      POP_PCT: toNullableNumber(period.probabilityOfPrecipitation?.value),
+      TRANS_WIND_MIN: toNullableNumber(period.grid?.transportWindSpeed),
+      TRANS_WIND_MAX: toNullableNumber(period.grid?.transportWindSpeed),
+      TRANS_WIND_DIR: period.grid?.transportWindDirection || null,
+      MIX_HT_FT: toNullableNumber(period.grid?.mixingHeight),
+      DI_VALUE: toNullableNumber(period.grid?.atmosphericDispersionIndex),
+      LVORI_VALUE: toNullableNumber(period.grid?.lvori),
+      FACTORS_EVAL: score.evaluated,
+      FACTORS_MATCH: score.matched,
+      SCORE_PCT: score.score,
+      SCORE_CLASS: score.scoreClass,
+      MISSING_FACTORS: score.missing.join(", ") || null
+    };
+  });
+  await applyRelatedAdds("forecastPeriods", periodRows);
+  unit.related = unit.related || {};
+  unit.related.latestForecastRun = run;
+}
+
+function burnEventToRelatedAttributes(unit, record) {
+  const status = record.canceled ? "CANCELED" : record.actualDate ? "COMPLETED" : "PLANNED";
+  return {
+    BURNUNIT_GUID: unit.sourceGlobalId,
+    EVENT_STATUS: status,
+    PLANNED_DATE: record.plannedDate || null,
+    ACTUAL_DATE: record.actualDate || null,
+    BURN_CANCELED: record.canceled ? 1 : 0,
+    TREATMENT_TYPE: treatmentTypeCode(record.treatmentType),
+    PLANNED_ACRES: record.plannedAcres,
+    ACTUAL_ACRES: record.actualAcres,
+    BURN_BOSS: record.burnBoss || null,
+    IGNITION_METHOD: unit.sourceValues?.ignitionMethod ?? unit.ignitionMethod,
+    SPOT_FORECAST_ID: record.spotForecastId || null,
+    SPOT_FORECAST_URL: record.spotForecastUrl || null,
+    PERMIT_REF: record.permitRef || null,
+    INTENSITY_CLASS: record.intensityClass || null,
+    COVERAGE_PCT: record.coveragePct,
+    EFFECTIVENESS: record.effectiveness || null,
+    FOLLOW_UP: record.followUp || null,
+    SMOKE_NOTES: record.smokeNotes || null,
+    EVENT_NOTES: record.notes || null
+  };
+}
+
+function spotForecastIdFromUrl(url) {
+  const match = String(url || "") 
+  .trim() 
+  .match(/spot\.weather\.gov\/forecasts\/(\d+)/i);
+  return match?.[1] || "";
+}
+
+function spotForecastUrlFromId(id) {
+  const value = String(id || "").trim();
+  if (!/^\d+$/.test(value)) {
+    return "";
+  }
+  return `https://spot.weather.gov/forecasts/${value}`;
+}
+
+function actualWeatherObservationNotes(actualWeather = {}) {
+  const parts = [];
+  const userNotes = String(actualWeather.observationNotes || "").trim();
+  if (userNotes) parts.push(userNotes);
+
+  const probability = String(actualWeather.probabilityPrecipitation || "").trim();
+  if (probability) {
+    parts.push(
+      `Probability of precipitation entered in the web app: ${probability}%. ` +
+      "The provided Actual_Weather_and_Fire_Behavior schema does not include a POP_PCT field."
+    );
+  }
+
+  return parts.length ? parts.join("\n\n") : null;
+}
+
+function actualWeatherToRelatedAttributes(unit, record, burnEventGuid) {
+  const w = record.actualWeather || {};
+  return {
+    BURNEVENT_GUID: burnEventGuid,
+    BURNUNIT_GUID: unit.sourceGlobalId,
+    OBS_TIME: record.actualDate || record.plannedDate || new Date(),
+    OBS_TYPE: record.actualDate ? "POST_BURN" : "PERIODIC",
+    OBS_SOURCE: "CVD Prescribed Fire GIS Hub",
+    TEMP_F: toNullableNumber(w.temperature),
+    RH_PCT: toNullableNumber(w.relativeHumidity),
+    WIND_MPH: toNullableNumber(w.windSpeed),
+    WIND_DIR: w.windDirection || null,
+    GUST_MPH: toNullableNumber(w.windGust),
+    QPF_IN: toNullableNumber(w.quantitativePrecipitation),
+    TRANS_WIND_MPH: toNullableNumber(w.transportWindSpeed),
+    TRANS_WIND_DIR: w.transportWindDirection || null,
+    MIX_HT_FT: toNullableNumber(w.mixingHeight),
+    DI_VALUE: toNullableNumber(w.dispersionIndex),
+    LVORI_VALUE: toNullableNumber(w.lvori),
+    FLAME_LENGTH_FT: toNullableNumber(w.flameLength),
+    ROS_FT_MIN: toNullableNumber(w.rateOfSpread),
+    SMOKE_DIR: w.smokeDirection || null,
+    SMOKE_BEHAVIOR: String(w.smokeBehavior || "").trim() || null,
+    OBS_NOTES: actualWeatherObservationNotes(w)
+  };
+}
+
+function hasActualWeatherValues(record) {
+  return Object.values(record.actualWeather || {}).some((value) => value !== null && value !== undefined && String(value).trim() !== "");
+}
+
+async function persistBurnEvent(unit, record) {
+  if (!unit.sourceGlobalId) throw new Error("The selected burn unit does not have a GlobalID for the burn-event relationship.");
+  ensureRelatedEditAllowed("burnEvents", record.sourceObjectId != null ? "update" : "add");
+  const eventIdentity = record.sourceObjectId != null
+    ? { objectId: record.sourceObjectId, globalId: record.sourceGlobalId }
+    : null;
+  const savedEvent = await applyRelatedRecord("burnEvents", burnEventToRelatedAttributes(unit, record), eventIdentity);
+  record.sourceObjectId = savedEvent.objectId;
+  record.sourceGlobalId = savedEvent.globalId || record.sourceGlobalId;
+  record.id = record.sourceGlobalId || record.id;
+
+  if (hasActualWeatherValues(record) && record.sourceGlobalId && relatedTable("actualWeather")) {
+    const weatherIdentity = record.actualWeatherObjectId != null
+      ? { objectId: record.actualWeatherObjectId, globalId: record.actualWeatherGlobalId }
+      : null;
+    const savedWeather = await applyRelatedRecord(
+      "actualWeather",
+      actualWeatherToRelatedAttributes(unit, record, record.sourceGlobalId),
+      weatherIdentity
+    );
+    record.actualWeatherObjectId = savedWeather.objectId;
+    record.actualWeatherGlobalId = savedWeather.globalId || record.actualWeatherGlobalId;
+  }
+}
+
+async function persistSubscriber(unit, subscriber) {
+  if (!unit.sourceGlobalId) throw new Error("The selected burn unit does not have a GlobalID for the notification relationship.");
+  ensureRelatedEditAllowed("notificationSubscriptions", subscriber.sourceObjectId != null ? "update" : "add");
+  const identity = subscriber.sourceObjectId != null
+    ? { objectId: subscriber.sourceObjectId, globalId: subscriber.sourceGlobalId }
+    : null;
+  const saved = await applyRelatedRecord("notificationSubscriptions", {
+    BURNUNIT_GUID: unit.sourceGlobalId,
+    AGO_USERNAME: state.user?.username || null,
+    SUBSCRIBER_NAME: subscriber.name,
+    EMAIL_ADDRESS: subscriber.email,
+    IS_OWNER: 0,
+    IS_ACTIVE: 1,
+    TRIGGER_CLASS: subscriber.triggerClass || "HIGH",
+    MIN_SCORE_PCT: subscriber.minScore ?? 75,
+    LEAD_HOURS: subscriber.leadHours ?? 24,
+    OPT_IN_DATE: subscriber.optInDate || new Date(),
+    OPT_OUT_DATE: null,
+    LAST_VERIFIED: new Date(),
+    DELIVERY_ENABLED: unit.notificationsEnabled ? 1 : 0,
+    SUBSCRIPTION_NOTES: null
+  }, identity);
+  subscriber.sourceObjectId = saved.objectId;
+  subscriber.sourceGlobalId = saved.globalId || subscriber.sourceGlobalId;
+  subscriber.id = subscriber.sourceGlobalId || subscriber.id;
+  subscriber.deliveryEnabled = unit.notificationsEnabled;
+}
+
+async function deactivateSubscriber(unit, subscriber) {
+  if (subscriber.sourceObjectId == null) return;
+  ensureRelatedEditAllowed("notificationSubscriptions", "update");
+  await applyRelatedRecord("notificationSubscriptions", {
+    IS_ACTIVE: 0,
+    DELIVERY_ENABLED: 0,
+    OPT_OUT_DATE: new Date()
+  }, { objectId: subscriber.sourceObjectId, globalId: subscriber.sourceGlobalId });
+}
+
+async function persistNotificationToggle(unit) {
+  if (!unit.subscribers.length) return;
+  const table = ensureRelatedEditAllowed("notificationSubscriptions", "update");
+  for (const subscriber of unit.subscribers) {
+    if (subscriber.sourceObjectId == null) continue;
+    await applyRelatedRecord("notificationSubscriptions", {
+      DELIVERY_ENABLED: unit.notificationsEnabled ? 1 : 0
+    }, { objectId: subscriber.sourceObjectId, globalId: subscriber.sourceGlobalId });
+    subscriber.deliveryEnabled = unit.notificationsEnabled;
+  }
+}
+
+async function ensureSourceGlobalId(unit) {
+  if (unit.sourceGlobalId) return unit.sourceGlobalId;
+  if (!state.sourceLayer || unit.sourceObjectId == null) return null;
+  const query = state.sourceLayer.createQuery();
+  query.objectIds = [unit.sourceObjectId];
+  query.outFields = [state.sourceLayer.globalIdField || CONFIG.prescribedBurns.fields.globalId];
+  query.returnGeometry = false;
+  const result = await state.sourceLayer.queryFeatures(query);
+  const globalId = result.features?.[0]?.attributes?.[state.sourceLayer.globalIdField || CONFIG.prescribedBurns.fields.globalId] || null;
+  if (globalId) unit.sourceGlobalId = globalId;
+  return globalId;
+}
+
+async function downloadFireEffectsReportData() {
+  if (!dom.downloadReportDataButton) return;
+  dom.downloadReportDataButton.disabled = true;
+  dom.downloadReportDataButton.setAttribute("aria-busy", "true");
+  const originalText = dom.downloadReportDataButton.textContent;
+  dom.downloadReportDataButton.textContent = "Preparing…";
+  try {
+    const exportData = await buildFireEffectsReportExport();
+    const text = JSON.stringify(exportData, jsonExportReplacer, 2);
+    const blob = new Blob([text], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    const prefix = getRelatedDataConfig().export?.filePrefix || "CVD_PrescribedFire_FireEffects_ReportData";
+    anchor.href = url;
+    anchor.download = `${prefix}_${stamp}.json`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    announce(`Report data downloaded for ${exportData.burnUnits.length} burn units.`);
+  } catch (error) {
+    console.error("Report-data export failed.", error);
+    announce(`Report data could not be downloaded. ${safeText(error.message, "Check related-table access.")}`);
+  } finally {
+    dom.downloadReportDataButton.disabled = false;
+    dom.downloadReportDataButton.removeAttribute("aria-busy");
+    dom.downloadReportDataButton.textContent = originalText;
+  }
+}
+
+async function buildFireEffectsReportExport() {
+  const includeNotifications = getRelatedDataConfig().export?.includeNotificationData === true;
+  const relatedRaw = {};
+  for (const [key, table] of Object.entries(state.related.tables)) {
+    const features = await queryAllTableFeatures(table);
+    relatedRaw[key] = features.map((feature) => tableAttributes(feature));
+  }
+
+  const sourceQuery = state.sourceLayer?.createQuery?.();
+  let sourceAttributesByBurn = new Map();
+  if (sourceQuery && state.sourceLayer) {
+    sourceQuery.where = CONFIG.prescribedBurns.definitionExpression || "1=1";
+    sourceQuery.outFields = ["*"];
+    sourceQuery.returnGeometry = false;
+    const sourceResult = await state.sourceLayer.queryFeatures(sourceQuery);
+    sourceAttributesByBurn = new Map((sourceResult.features || []).map((feature) => [
+      normalizeGuid(feature.attributes?.[state.sourceLayer.globalIdField || CONFIG.prescribedBurns.fields.globalId]),
+      { ...(feature.attributes || {}) }
+    ]));
+  }
+
+  const indexBy = (rows, field) => {
+    const map = new Map();
+    for (const row of rows || []) {
+      const key = normalizeGuid(row[field]);
+      if (!key) continue;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(row);
+    }
+    return map;
+  };
+  const prescriptionsByBurn = indexBy(relatedRaw.weatherPrescriptions, "BURNUNIT_GUID");
+  const runsByBurn = indexBy(relatedRaw.forecastRuns, "BURNUNIT_GUID");
+  const periodsByRun = indexBy(relatedRaw.forecastPeriods, "FORECASTRUN_GUID");
+  const eventsByBurn = indexBy(relatedRaw.burnEvents, "BURNUNIT_GUID");
+  const weatherByEvent = indexBy(relatedRaw.actualWeather, "BURNEVENT_GUID");
+  const subscriptionsByBurn = indexBy(relatedRaw.notificationSubscriptions, "BURNUNIT_GUID");
+  const deliveriesBySubscription = indexBy(relatedRaw.notificationDeliveries, "SUBSCRIPTION_GUID");
+
+  const burnUnits = state.units.map((unit) => {
+    const burnKey = normalizeGuid(unit.sourceGlobalId);
+    const forecasts = (runsByBurn.get(burnKey) || []).map((run) => ({
+      ...run,
+      periods: periodsByRun.get(normalizeGuid(run.GlobalID)) || []
+    }));
+    const events = (eventsByBurn.get(burnKey) || []).map((event) => ({
+      ...event,
+      actualWeatherAndFireBehavior: weatherByEvent.get(normalizeGuid(event.GlobalID)) || []
+    }));
+    const rawSubscriptions = subscriptionsByBurn.get(burnKey) || [];
+    const subscriptionDeliveryCount = rawSubscriptions.reduce(
+      (sum, subscription) => sum + (deliveriesBySubscription.get(normalizeGuid(subscription.GlobalID)) || []).length,
+      0
+    );
+    const subscriptions = includeNotifications
+      ? rawSubscriptions.map((subscription) => ({
+          ...subscription,
+          deliveryLog: deliveriesBySubscription.get(normalizeGuid(subscription.GlobalID)) || []
+        }))
+      : undefined;
+
+    return {
+      burnUnit: {
+        ...(sourceAttributesByBurn.get(burnKey) || {}),
+        GlobalID: unit.sourceGlobalId,
+        OBJECTID: unit.sourceObjectId,
+        BURN_UNIT: unit.name,
+        PARK_UNIT: unit.parkUnit,
+        LOCALITY: unit.locality,
+        STATE: unit.state,
+        STATUS: unit.status,
+        PRIORITY: unit.priority,
+        BURN_WINDOW: unit.burnWindow,
+        FUEL_TYPE: unit.fuel,
+        IGNITION_METHOD: unit.ignitionMethod,
+        ACRES_BURNED: unit.acres,
+        START_DATE: unit.startDate || null,
+        END_DATE: unit.endDate || null,
+        LAST_BURNED: unit.lastBurned || null,
+        OBJECTIVE: unit.objective || null,
+        COMMENTS: unit.notes || null,
+        LAST_UPDATED: unit.lastUpdated || null,
+        CENTER_LATITUDE: unit.latitude,
+        CENTER_LONGITUDE: unit.longitude,
+        geometry: unit.geometry?.toJSON?.() || unit.geometry || null
+      },
+      preferredWeatherPrescriptions: prescriptionsByBurn.get(burnKey) || [],
+      forecastRuns: forecasts,
+      burnEvents: events,
+      notificationSummary: {
+        subscriptionCount: rawSubscriptions.length,
+        deliveryRecordCount: subscriptionDeliveryCount,
+        personalInformationIncluded: includeNotifications
+      },
+      ...(includeNotifications ? { notificationSubscriptions: subscriptions } : {})
+    };
+  });
+
+  return {
+    schema: "CVD Prescribed Fire fire-effects report data v1",
+    generatedUtc: new Date().toISOString(),
+    applicationVersion: "3.9",
+    sourceFeatureService: state.related.serviceRoot || featureServiceRootFromUrl(state.sourceLayer?.url),
+    burnUnitCount: burnUnits.length,
+    notificationDataIncluded: includeNotifications,
+    notificationDataNote: includeNotifications
+      ? "Notification subscription and delivery records are included because relatedData.export.includeNotificationData is true. Handle this file as restricted data."
+      : "Notification subscription and delivery records are excluded by default because they can contain personal information and are not required for fire-effects monitoring reports.",
+    fgdbSchemaReviewed: [
+      "RxBurns_Poly",
+      "Preferred_Weather_Prescriptions",
+      "Forecast_Runs",
+      "Forecast_Periods_and_Scores",
+      "Burn_Events",
+      "Actual_Weather_and_Fire_Behavior",
+      "Notification_Subscriptions",
+      "Notification_Delivery_Log"
+    ],
+    burnUnits
+  };
+}
+
+function jsonExportReplacer(key, value) {
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "number" && !Number.isFinite(value)) return null;
+  return value;
+}
+
 
 function reconcileBurnFieldMap(layer) {
   const configured = CONFIG.prescribedBurns.fields;
@@ -1017,6 +2394,72 @@ function codedDomainOptionsForField(layer, field) {
       return true;
     })
     .map((entry) => ({ code: entry.code, name: String(entry.name) }));
+}
+
+function relatedDomainOptions(tableKey, fieldName) {
+  const table = relatedTable(tableKey);
+  if (!table) return [];
+  const requested = normalizeFieldToken(fieldName);
+  const field = (table.fields || []).find((item) =>
+    normalizeFieldToken(item.name) === requested ||
+    normalizeFieldToken(item.alias) === requested
+  );
+  return codedDomainOptionsForField(table, field);
+}
+
+function setSelectDomainOptions(select, options, placeholder = "Not entered") {
+  if (!select) return;
+  const currentValue = select.value;
+  select.replaceChildren();
+
+  const blank = document.createElement("option");
+  blank.value = "";
+  blank.textContent = placeholder;
+  select.append(blank);
+
+  for (const optionInfo of options || []) {
+    const option = document.createElement("option");
+    option.value = String(optionInfo.code);
+    option.textContent = optionInfo.name;
+    select.append(option);
+  }
+
+  const hasCurrentValue = Array.from(select.options)
+    .some((option) => option.value === String(currentValue));
+  if (hasCurrentValue) select.value = String(currentValue);
+}
+
+function populateRelatedDomainSelect(select, tableKey, fieldName, placeholder, fallbackOptions = []) {
+  const options = relatedDomainOptions(tableKey, fieldName);
+  setSelectDomainOptions(
+    select,
+    options.length ? options : fallbackOptions,
+    placeholder
+  );
+}
+
+function refreshActualWeatherDirectionOptions() {
+  for (const definition of ACTUAL_WEATHER_FIELDS.filter((item) => item.type === "direction")) {
+    const select = document.getElementById(`actual-${definition.key}`);
+    if (!select) continue;
+    const options = relatedDomainOptions("actualWeather", definition.arcgisField);
+    setSelectDomainOptions(
+      select,
+      options.length ? options : FALLBACK_DIRECTION_OPTIONS,
+      "Not entered"
+    );
+  }
+}
+
+function refreshBurnEventDomainControls() {
+  populateRelatedDomainSelect(
+    dom.eventIntensityClass,
+    "burnEvents",
+    "INTENSITY_CLASS",
+    "Not entered",
+    FALLBACK_INTENSITY_OPTIONS
+  );
+  refreshActualWeatherDirectionOptions();
 }
 
 function applySchemaLabels() {
@@ -1182,6 +2625,7 @@ function unitFromFeature(feature) {
   return normalizeUnit({
     id: String(idValue),
     sourceObjectId: a[f.objectId] ?? null,
+    sourceGlobalId: a[f.globalId] ?? null,
     sourceValues,
     name: a[f.name],
     parkUnit: decodeDomainValue("parkUnit", a[f.parkUnit]),
@@ -1301,6 +2745,7 @@ function normalizeUnit(unit) {
   return {
     id: String(unit.id || crypto.randomUUID()),
     sourceObjectId: unit.sourceObjectId ?? null,
+    sourceGlobalId: unit.sourceGlobalId ?? null,
     sourceValues: { ...(unit.sourceValues || {}) },
     name: safeText(unit.name, "Unnamed burn unit"),
     parkUnit: safeText(unit.parkUnit, "Park unit not listed"),
@@ -1325,7 +2770,8 @@ function normalizeUnit(unit) {
     forecastScores: defaultScores,
     notificationsEnabled: Boolean(unit.notificationsEnabled),
     subscribers: Array.isArray(unit.subscribers) ? unit.subscribers : [],
-    events: Array.isArray(unit.events) ? unit.events : []
+    events: Array.isArray(unit.events) ? unit.events : [],
+    related: { ...(unit.related || {}) }
   };
 }
 
@@ -1743,6 +3189,11 @@ async function selectUnit(id, options = {}) {
   closeMapPopup();
 
   state.selectedUnitId = unit.id;
+  try {
+    await loadRelatedDataForUnit(unit);
+  } catch (error) {
+    console.warn("Related records could not be loaded for the selected burn unit.", error);
+  }
   renderSelectedUnit();
   refreshBurnGraphics();
   if (options.zoom) {
@@ -1843,11 +3294,16 @@ function renderSubscribers(unit) {
     remove.type = "button";
     remove.setAttribute("aria-label", `Remove ${subscriber.name} from subscribers`);
     remove.textContent = "×";
-    remove.addEventListener("click", () => {
-      unit.subscribers = unit.subscribers.filter((itemValue) => itemValue.id !== subscriber.id);
-      saveUnitState(unit);
-      renderSubscribers(unit);
-      announce(`${subscriber.name} removed from subscribers.`);
+    remove.addEventListener("click", async () => {
+      try {
+        await deactivateSubscriber(unit, subscriber);
+        unit.subscribers = unit.subscribers.filter((itemValue) => itemValue.id !== subscriber.id);
+        renderSubscribers(unit);
+        announce(`${subscriber.name} removed from subscribers.`);
+      } catch (error) {
+        console.error("Subscriber could not be removed.", error);
+        announce(`Subscriber was not removed. ${safeText(error.message, "Check related-table editing permissions.")}`);
+      }
     });
     item.append(text, remove);
     dom.subscriberList.append(item);
@@ -2088,14 +3544,23 @@ function initializeFormsAndControls() {
   dom.editUnitDetailsButton.addEventListener("click", () => openUnitDialog(selectedUnit()));
   dom.editBurnAreaButton.addEventListener("click", beginEditBurnArea);
   dom.toggleUnitStatusButton.addEventListener("click", toggleSelectedUnitStatus);
-  dom.notificationToggle.addEventListener("change", () => {
+  dom.notificationToggle.addEventListener("change", async () => {
     const unit = selectedUnit();
     if (!unit) return;
+    const previous = unit.notificationsEnabled;
     unit.notificationsEnabled = dom.notificationToggle.checked;
-    saveUnitState(unit);
-    announce(`Email notifications ${unit.notificationsEnabled ? "enabled" : "disabled"} for ${unit.name}.`);
+    try {
+      await persistNotificationToggle(unit);
+      announce(`Email notifications ${unit.notificationsEnabled ? "enabled" : "disabled"} for ${unit.name}.`);
+    } catch (error) {
+      console.error("Notification preference could not be saved.", error);
+      unit.notificationsEnabled = previous;
+      dom.notificationToggle.checked = previous;
+      announce(`Notification preference was not saved. ${safeText(error.message, "Check related-table editing permissions.")}`);
+    }
   });
   dom.subscriberForm.addEventListener("submit", addSubscriber);
+  dom.downloadReportDataButton?.addEventListener("click", downloadFireEffectsReportData);
 
   [dom.editConditionsButton, dom.editConditionsButton2].forEach((button) => button.addEventListener("click", openConditionsDialog));
   dom.smokeToggle.addEventListener("change", updateSmokeScreening);
@@ -2122,6 +3587,20 @@ function initializeFormsAndControls() {
   dom.unitForm.addEventListener("submit", handleUnitFormSubmit);
   dom.conditionsForm.addEventListener("submit", handleConditionsFormSubmit);
   dom.eventForm.addEventListener("submit", handleEventFormSubmit);
+
+  dom.eventSpotForecastUrl.addEventListener("change", () => {
+    const id = spotForecastIdFromUrl(
+      dom.eventSpotForecastUrl.value);
+    if (id) {
+      dom.eventSpotForecastId.value = id;
+    }
+  });
+  dom.eventSpotForecastId.addEventListener("change", () => {
+    const id = dom.eventSpotForecastId.value.trim();
+    if (id && !dom.eventSpotForecastUrl.value.trim()) {
+      dom.eventSpotForecastUrl.value = spotForecastUrlFromId(id);
+    }
+  });
 }
 
 function beginSimpleSquare() {
@@ -2387,7 +3866,11 @@ async function saveUnitState(unit, operation = "update") {
   const result = await state.sourceLayer.applyEdits(edits);
   const editResult = operation === "add" ? result.addFeatureResults?.[0] : result.updateFeatureResults?.[0];
   if (editResult?.error) throw new Error(editResult.error.message || "ArcGIS rejected the feature edit.");
-  if (operation === "add" && editResult?.objectId != null) unit.sourceObjectId = editResult.objectId;
+  if (operation === "add") {
+    if (editResult?.objectId != null) unit.sourceObjectId = editResult.objectId;
+    if (editResult?.globalId) unit.sourceGlobalId = editResult.globalId;
+    if (!unit.sourceGlobalId) await ensureSourceGlobalId(unit);
+  }
 }
 
 function unitToSourceAttributes(unit) {
@@ -2457,20 +3940,29 @@ function toggleSelectedUnitStatus() {
   );
 }
 
-function addSubscriber(event) {
+async function addSubscriber(event) {
   event.preventDefault();
   const unit = selectedUnit();
   if (!unit || !dom.subscriberForm.reportValidity()) return;
   const subscriber = {
     id: crypto.randomUUID(),
     name: dom.subscriberName.value.trim(),
-    email: dom.subscriberEmail.value.trim()
+    email: dom.subscriberEmail.value.trim(),
+    triggerClass: "HIGH",
+    minScore: 75,
+    leadHours: 24,
+    optInDate: new Date().toISOString()
   };
-  unit.subscribers.push(subscriber);
-  saveUnitState(unit);
-  dom.subscriberForm.reset();
-  renderSubscribers(unit);
-  announce(`${subscriber.name} added as a subscriber.`);
+  try {
+    await persistSubscriber(unit, subscriber);
+    unit.subscribers.push(subscriber);
+    dom.subscriberForm.reset();
+    renderSubscribers(unit);
+    announce(`${subscriber.name} added as a subscriber.`);
+  } catch (error) {
+    console.error("Subscriber could not be saved.", error);
+    announce(`Subscriber was not saved. ${safeText(error.message, "Check related-table editing permissions.")}`);
+  }
 }
 
 function buildConditionForms() {
@@ -2494,32 +3986,34 @@ function buildConditionForms() {
   }
 
   dom.actualWeatherFields.replaceChildren();
-  for (const [key, label] of ACTUAL_WEATHER_FIELDS) {
+  for (const definition of ACTUAL_WEATHER_FIELDS) {
     const group = document.createElement("div");
-    group.className = "field-group";
+    group.className = definition.wide
+      ? "field-group field-group--wide"
+      : "field-group";
+
     const inputLabel = document.createElement("label");
-    inputLabel.htmlFor = `actual-${key}`;
-    inputLabel.textContent = label;
+    inputLabel.htmlFor = `actual-${definition.key}`;
+    inputLabel.textContent = definition.label;
+
     let input;
-    if (key.toLowerCase().includes("direction")) {
+    if (definition.type === "direction") {
       input = document.createElement("select");
-      const empty = document.createElement("option");
-      empty.value = "";
-      empty.textContent = "Not entered";
-      input.append(empty);
-      DIRECTIONS.forEach((direction) => {
-        const option = document.createElement("option");
-        option.value = direction;
-        option.textContent = direction;
-        input.append(option);
-      });
+      setSelectDomainOptions(input, FALLBACK_DIRECTION_OPTIONS, "Not entered");
+    } else if (definition.type === "textarea") {
+      input = document.createElement("textarea");
+      input.rows = definition.rows || 3;
+      if (definition.maxLength) input.maxLength = definition.maxLength;
     } else {
       input = document.createElement("input");
       input.type = "number";
-      input.step = "any";
+      input.step = definition.step || "any";
+      if (definition.min !== undefined) input.min = String(definition.min);
+      if (definition.max !== undefined) input.max = String(definition.max);
     }
-    input.id = `actual-${key}`;
-    input.dataset.actualWeather = key;
+
+    input.id = `actual-${definition.key}`;
+    input.dataset.actualWeather = definition.key;
     group.append(inputLabel, input);
     dom.actualWeatherFields.append(group);
   }
@@ -2587,7 +4081,7 @@ function openConditionsDialog() {
   document.getElementById("temperatureMin").focus();
 }
 
-function handleConditionsFormSubmit(event) {
+async function handleConditionsFormSubmit(event) {
   event.preventDefault();
   const unit = selectedUnit();
   if (!unit) return;
@@ -2608,17 +4102,27 @@ function handleConditionsFormSubmit(event) {
   unit.preferred = normalizePreferred(preferred);
   const cached = state.forecastCache.get(unit.id);
   if (cached) updateUnitScoresFromForecast(unit, cached.daily);
-  saveUnitState(unit);
-  dom.conditionsDialog.close();
-  renderAll();
-  renderSelectedUnit();
-  announce("Preferred weather conditions saved.");
+  try {
+    await ensureSourceGlobalId(unit);
+    await savePreferredConditionsRelated(unit);
+    await saveUnitState(unit);
+    dom.conditionsDialog.close();
+    renderAll();
+    renderSelectedUnit();
+    announce("Preferred weather conditions saved to the related prescription table.");
+  } catch (error) {
+    console.error("Preferred weather conditions could not be saved.", error);
+    const message = `Preferred conditions were not saved. ${safeText(error.message, "Check related-table editing permissions.")}`;
+    announce(message);
+    window.alert(message);
+  }
 }
 
 function openEventDialog(eventRecord = null) {
   const unit = selectedUnit();
   if (!unit) return;
   dom.eventForm.reset();
+  refreshBurnEventDomainControls();
   dom.eventDialogTitle.textContent = eventRecord ? "Edit burn event" : "Add burn event";
   dom.eventId.value = eventRecord?.id || "";
   dom.plannedBurnDate.value = eventRecord?.plannedDate || "";
@@ -2627,6 +4131,15 @@ function openEventDialog(eventRecord = null) {
   dom.treatmentType.value = eventRecord?.treatmentType || "";
   dom.plannedAcres.value = eventRecord?.plannedAcres ?? formatNumber(unit.acres, 2).replace(/,/g, "");
   dom.actualAcres.value = eventRecord?.actualAcres ?? "";
+  dom.eventBurnBoss.value = eventRecord?.burnBoss || "";
+  dom.eventPermitRef.value = eventRecord?.permitRef || "";
+  dom.eventSpotForecastId.value = eventRecord?.spotForecastId || "";
+  dom.eventSpotForecastUrl.value = eventRecord?.spotForecastUrl || "";
+  dom.eventIntensityClass.value = eventRecord?.intensityClass || "";
+  dom.eventCoveragePct.value = eventRecord?.coveragePct ?? "";
+  dom.eventEffectiveness.value = eventRecord?.effectiveness || "";
+  dom.eventFollowUp.value = eventRecord?.followUp || "";
+  dom.eventSmokeNotes.value = eventRecord?.smokeNotes || "";
   dom.eventNotes.value = eventRecord?.notes || "";
   document.querySelectorAll("[data-actual-weather]").forEach((input) => {
     input.value = eventRecord?.actualWeather?.[input.dataset.actualWeather] ?? "";
@@ -2635,7 +4148,7 @@ function openEventDialog(eventRecord = null) {
   dom.plannedBurnDate.focus();
 }
 
-function handleEventFormSubmit(event) {
+async function handleEventFormSubmit(event) {
   event.preventDefault();
   const unit = selectedUnit();
   if (!unit || !dom.eventForm.reportValidity()) return;
@@ -2643,27 +4156,62 @@ function handleEventFormSubmit(event) {
   document.querySelectorAll("[data-actual-weather]").forEach((input) => {
     actualWeather[input.dataset.actualWeather] = input.value;
   });
+  const existing = dom.eventId.value ? unit.events.find((item) => item.id === dom.eventId.value) : null;
+
+  let spotForecastId = dom.eventSpotForecastId.value.trim();
+  let spotForecastUrl = dom.eventSpotForecastUrl.value.trim();
+  const spotIdFromUrl = spotForecastIdFromUrl(spotForecastUrl);
+  if (spotIdFromUrl) {
+    spotForecastId = spotIdFromUrl;
+  } else if (spotForecastId && !spotForecastUrl) {
+    spotForecastUrl = spotForecastUrlFromId(spotForecastId);
+  }
+
   const record = {
-    id: dom.eventId.value || crypto.randomUUID(),
+    ...(existing || {}),
+    id: existing?.id || dom.eventId.value || crypto.randomUUID(),
     plannedDate: dom.plannedBurnDate.value,
     actualDate: dom.actualBurnDate.value,
     canceled: dom.burnCanceled.checked,
     treatmentType: dom.treatmentType.value,
     plannedAcres: toNullableNumber(dom.plannedAcres.value),
     actualAcres: toNullableNumber(dom.actualAcres.value),
-    notes: dom.eventNotes.value,
+    burnBoss: dom.eventBurnBoss.value.trim(),
+    permitRef: dom.eventPermitRef.value.trim(),
+    spotForecastId,
+    spotForecastUrl,
+    intensityClass: dom.eventIntensityClass.value,
+    coveragePct: toNullableNumber(dom.eventCoveragePct.value),
+    effectiveness: dom.eventEffectiveness.value.trim(),
+    followUp: dom.eventFollowUp.value.trim(),
+    smokeNotes: dom.eventSmokeNotes.value.trim(),
+    notes: dom.eventNotes.value.trim(),
     actualWeather
   };
-  const index = unit.events.findIndex((item) => item.id === record.id);
-  if (index >= 0) unit.events[index] = record;
-  else unit.events.push(record);
-  if (record.actualDate && !record.canceled) unit.lastBurned = record.actualDate;
-  saveUnitState(unit);
-  dom.eventDialog.close();
-  renderAll();
-  renderSelectedUnit();
-  activateUnitSection("events");
-  announce("Burn event saved.");
+  if (record.coveragePct != null && (record.coveragePct < 0 || record.coveragePct > 100)) {
+    dom.eventCoveragePct.focus();
+    announce("Burn coverage must be between 0 and 100 percent.");
+    return;
+  }
+  try {
+    await ensureSourceGlobalId(unit);
+    await persistBurnEvent(unit, record);
+    const index = existing ? unit.events.indexOf(existing) : -1;
+    if (index >= 0) unit.events[index] = record;
+    else unit.events.push(record);
+    if (record.actualDate && !record.canceled) unit.lastBurned = record.actualDate;
+    await saveUnitState(unit);
+    dom.eventDialog.close();
+    renderAll();
+    renderSelectedUnit();
+    activateUnitSection("events");
+    announce("Burn event and actual weather saved to related tables.");
+  } catch (error) {
+    console.error("Burn event could not be saved.", error);
+    const message = `Burn event was not saved. ${safeText(error.message, "Check related-table editing permissions.")}`;
+    announce(message);
+    window.alert(message);
+  }
 }
 
 function renderEvents(unit) {
@@ -2880,7 +4428,7 @@ async function loadPointForecast(latitude, longitude, unitId = null) {
     ]);
     const hourly = hourlyData.properties?.periods || [];
     const basicDaily = (dailyData.properties?.periods || []).filter((period) => period.isDaytime).slice(0, 7);
-    const daily = enrichDailyForecastPeriods(basicDaily, gridData?.properties || {});
+    const daily = enrichDailyForecastPeriods(basicDaily, gridData?.properties || {}, hourly);
     if (!hourly.length) throw new Error("No hourly forecast periods were returned.");
 
     const payload = { latitude, longitude, pointData, hourly, daily, updated: new Date().toISOString() };
@@ -2893,9 +4441,12 @@ async function loadPointForecast(latitude, longitude, unitId = null) {
         updateUnitScoresFromForecast(unit, daily);
         unit.lastUpdated = payload.updated;
         try {
+          await ensureSourceGlobalId(unit);
+          await persistForecastRun(unit, payload);
           await saveUnitState(unit);
         } catch (saveError) {
-          console.warn("Forecast loaded, but forecast metadata could not be written to the hosted layer.", saveError);
+          console.warn("Forecast loaded, but the forecast run/period records could not be fully persisted.", saveError);
+          announce(`Forecast loaded, but related forecast records were not fully saved. ${safeText(saveError.message, "Check related-table editing permissions.")}`);
         }
         renderAll();
         renderSelectedUnit();
@@ -2957,12 +4508,66 @@ function renderPointForecast({ latitude, longitude, pointData, hourly }) {
   dom.weatherContent.hidden = false;
 }
 
-function enrichDailyForecastPeriods(periods, gridProperties) {
+function enrichDailyForecastPeriods(periods, gridProperties, hourlyPeriods = []) {
   return periods.map((period) => {
     const referenceTime = new Date(period.startTime);
+    const periodStart = new Date(period.startTime);
+    const periodEnd = period.endTime
+      ? new Date(period.endTime)
+      : new Date(periodStart.getTime() + 12 * 60 * 60 * 1000);
+
+    // NWS removed relativeHumidity from the 12-hour /forecast endpoint in 2024.
+    // For fire-weather planning, use the minimum hourly RH during each daytime
+    // period. This matches standard NWS fire-weather convention for daytime RH.
+    const hourlyMinRh = getHourlyStatisticForPeriod(
+      hourlyPeriods,
+      periodStart,
+      periodEnd,
+      (hour) => hour.relativeHumidity?.value,
+      "min"
+    );
+    const gridMinRh = getGridStatisticInRange(
+      gridProperties.relativeHumidity,
+      periodStart,
+      periodEnd,
+      "percent",
+      "min"
+    );
+    const minimumRelativeHumidity = Number.isFinite(hourlyMinRh)
+      ? hourlyMinRh
+      : gridMinRh;
+
+    // These layers are exposed by the raw NWS gridpoint endpoint when the
+    // issuing WFO populates them. They are not guaranteed for every grid/WFO.
+    const atmosphericDispersionIndex = getGridStatisticInRange(
+      gridProperties.atmosphericDispersionIndex,
+      periodStart,
+      periodEnd,
+      null,
+      "max"
+    );
+    const lvori = getGridStatisticInRange(
+      gridProperties.lowVisibilityOccurrenceRiskIndex,
+      periodStart,
+      periodEnd,
+      null,
+      "max"
+    );
+
     return {
       ...period,
+      relativeHumidity: {
+        unitCode: period.relativeHumidity?.unitCode || "wmoUnit:percent",
+        value: Number.isFinite(minimumRelativeHumidity)
+          ? Math.round(minimumRelativeHumidity)
+          : null
+      },
       grid: {
+        relativeHumidity: Number.isFinite(minimumRelativeHumidity)
+          ? Math.round(minimumRelativeHumidity)
+          : null,
+        atmosphericDispersionIndex,
+        lvori,
         quantitativePrecipitation: getGridValueAt(gridProperties.quantitativePrecipitation, referenceTime, "in"),
         transportWindSpeed: getGridValueAt(gridProperties.transportWindSpeed, referenceTime, "mph"),
         transportWindDirectionDegrees: getGridValueAt(gridProperties.transportWindDirection, referenceTime, "degree"),
@@ -2979,6 +4584,47 @@ function enrichDailyForecastPeriods(periods, gridProperties) {
         : null
     }
   }));
+}
+
+function getHourlyStatisticForPeriod(hourlyPeriods, startTime, endTime, valueGetter, statistic = "min") {
+  const start = startTime?.getTime?.();
+  const end = endTime?.getTime?.();
+  if (!Array.isArray(hourlyPeriods) || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+
+  const values = hourlyPeriods
+    .filter((period) => {
+      const time = new Date(period.startTime).getTime();
+      return Number.isFinite(time) && time >= start && time < end;
+    })
+    .map((period) => Number(valueGetter(period)))
+    .filter(Number.isFinite);
+
+  if (!values.length) return null;
+  if (statistic === "max") return Math.max(...values);
+  if (statistic === "average") return values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.min(...values);
+}
+
+function getGridStatisticInRange(property, startTime, endTime, targetUnit, statistic = "min") {
+  if (!property || !Array.isArray(property.values)) return null;
+  const start = startTime?.getTime?.();
+  const end = endTime?.getTime?.();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+
+  const values = [];
+  for (const entry of property.values) {
+    const interval = parseNwsValidTime(entry.validTime);
+    if (!interval || interval.end <= start || interval.start >= end) continue;
+    const rawValue = Number(entry.value);
+    if (!Number.isFinite(rawValue)) continue;
+    const converted = convertNwsGridValue(rawValue, property.uom, targetUnit);
+    if (Number.isFinite(converted)) values.push(converted);
+  }
+
+  if (!values.length) return null;
+  if (statistic === "max") return Math.max(...values);
+  if (statistic === "average") return values.reduce((sum, value) => sum + value, 0) / values.length;
+  return Math.min(...values);
 }
 
 function getGridValueAt(property, referenceTime, targetUnit) {
@@ -3053,11 +4699,13 @@ function scoreForecastPeriod(period, preferred) {
     probabilityPrecipitation: Number(period.probabilityOfPrecipitation?.value),
     transportWindSpeed: Number(period.grid?.transportWindSpeed),
     transportWindDirection: period.grid?.transportWindDirection,
-    mixingHeight: Number(period.grid?.mixingHeight)
+    mixingHeight: Number(period.grid?.mixingHeight),
+    dispersionIndex: Number(period.grid?.atmosphericDispersionIndex),
+    lvori: Number(period.grid?.lvori)
   };
   let considered = 0;
   let matched = 0;
-  for (const key of ["temperature", "relativeHumidity", "windSpeed", "windGust", "quantitativePrecipitation", "probabilityPrecipitation", "transportWindSpeed", "mixingHeight"]) {
+  for (const key of ["temperature", "relativeHumidity", "windSpeed", "windGust", "quantitativePrecipitation", "probabilityPrecipitation", "transportWindSpeed", "mixingHeight", "dispersionIndex", "lvori"]) {
     const range = preferred[key];
     const value = available[key];
     const hasRange = range && (range.min != null || range.max != null);
@@ -3095,7 +4743,7 @@ function renderForecastMatrix(unit) {
   const rows = [
     ["Burn forecast score", "—", (period, index) => unit.forecastScores[index] == null ? "n/a" : `${unit.forecastScores[index]}%`],
     ["Temperature (°F)", formatRange(unit.preferred.temperature), (period) => period ? safeText(period.temperature, "n/a") : "n/a"],
-    ["Relative humidity (%)", formatRange(unit.preferred.relativeHumidity), (period) => period ? formatNullable(period.relativeHumidity?.value) : "n/a"],
+    ["Minimum relative humidity (%)", formatRange(unit.preferred.relativeHumidity), (period) => period ? formatNullable(period.relativeHumidity?.value) : "n/a"],
     ["Wind speed (mph)", formatRange(unit.preferred.windSpeed), (period) => period ? safeText(period.windSpeed, "n/a") : "n/a"],
     ["Wind direction", unit.preferred.windDirection.join(", ") || "Any", (period) => period ? safeText(period.windDirection, "n/a") : "n/a"],
     ["Wind gust (mph)", formatRange(unit.preferred.windGust), (period) => period ? formatNullable(period.grid?.windGust ?? parseWindNumber(period.windGust), 1) : "n/a"],
@@ -3103,9 +4751,9 @@ function renderForecastMatrix(unit) {
     ["Probability of precipitation (%)", formatRange(unit.preferred.probabilityPrecipitation), (period) => period ? formatNullable(period.probabilityOfPrecipitation?.value) : "n/a"],
     ["Transport wind speed (mph)", formatRange(unit.preferred.transportWindSpeed), (period) => period ? formatNullable(period.grid?.transportWindSpeed, 1) : "n/a"],
     ["Transport wind direction", unit.preferred.transportWindDirection.join(", ") || "Any", (period) => period ? safeText(period.grid?.transportWindDirection, "n/a") : "n/a"],
-    ["Dispersion index", formatRange(unit.preferred.dispersionIndex), () => "n/a"],
+    ["Atmospheric dispersion index (ADI)", formatRange(unit.preferred.dispersionIndex), (period) => period ? formatNullable(period.grid?.atmosphericDispersionIndex, 0) : "n/a"],
     ["Mixing height (ft)", formatRange(unit.preferred.mixingHeight), (period) => period ? formatNullable(period.grid?.mixingHeight, 0) : "n/a"],
-    ["LVORI", formatRange(unit.preferred.lvori), () => "n/a"]
+    ["LVORI", formatRange(unit.preferred.lvori), (period) => period ? formatNullable(period.grid?.lvori, 0) : "n/a"]
   ];
 
   for (const [label, preferred, valueFn] of rows) {

@@ -28,7 +28,7 @@ window.APP_CONFIG = {
     // "auto" uses OAuth when oauthAppId is populated; otherwise it uses the
     // API key above. Use "oauth" for an authorized-user production app.
     mode: "oauth",
-    oauthAppId: "lSLvkCzwNXRHuhAF",
+    oauthAppId: "Ew8W5g0OVnHvjikS",
     oauthPortalUrl: "https://www.arcgis.com",
     requireSignIn: true,
     popup: false,
@@ -41,7 +41,7 @@ window.APP_CONFIG = {
   },
 
   prescribedBurns: {
-    serviceUrl: "https://services2.arcgis.com/AhxrK3F6WM8ECvDi/arcgis/rest/services/RxBurns_Poly/FeatureServer/0",
+    serviceUrl: "https://services2.arcgis.com/AhxrK3F6WM8ECvDi/arcgis/rest/services/CVD_PrescribedFire_StagingMap/FeatureServer/0",
     webMapLayerTitle: "RxBurns_Poly",
     // Keep the URL pointed at the actual feature layer (/FeatureServer/0).
     // layerId is retained as a fallback when a service-root URL is supplied.
@@ -67,11 +67,50 @@ window.APP_CONFIG = {
       ignitionMethod: "IGNITION_METHOD",
       acres: "ACRES_BURNED",
       startDate: "START_DATE",
-      endDate: "COMPLETED_DATE",
+      endDate: "END_DATE",
       lastBurned: "LAST_BURNED",
       objective: "OBJECTIVE",
       notes: "COMMENTS",
       lastUpdated: "LAST_UPDATED"
+    }
+  },
+
+  relatedData: {
+    // Tables reviewed from CVD_PrescribedFire_StagingMap_FL.gdb. The app
+    // discovers their numeric table IDs from the feature-service root at runtime.
+    enabled: true,
+    serviceRoot: "",
+    requireOAuthForEdits: true,
+    loadLatestForecastScoresOnStart: true,
+    // ArcGIS Online publishes the file-geodatabase table names as the
+    // following service display names. v3.9 also normalizes spaces,
+    // underscores, punctuation, and case when discovering the tables.
+    tableNames: {
+      weatherPrescriptions: "Preferred Weather Prescriptions",
+      forecastRuns: "Forecast Runs",
+      forecastPeriods: "Forecast Periods and Scores",
+      burnEvents: "Burn Events",
+      actualWeather: "Actual Weather and Fire Behavior",
+      notificationSubscriptions: "Notification Subscriptions",
+      notificationDeliveries: "Notification Delivery Log"
+    },
+    // Stable IDs found in the supplied staging-service metadata. These are
+    // used as a fallback when a publisher later changes a display name.
+    tableIds: {
+      weatherPrescriptions: 10,
+      forecastRuns: 20,
+      forecastPeriods: 21,
+      burnEvents: 30,
+      actualWeather: 31,
+      notificationSubscriptions: 40,
+      notificationDeliveries: 41
+    },
+    export: {
+      filePrefix: "CVD_PrescribedFire_FireEffects_ReportData",
+      // Subscriber names, usernames, email addresses, unsubscribe hashes, and
+      // delivery logs are omitted by default because they are not needed for
+      // fire-effects reporting and may contain personal information.
+      includeNotificationData: false
     }
   },
 

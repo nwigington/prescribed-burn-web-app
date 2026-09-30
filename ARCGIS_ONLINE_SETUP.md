@@ -1,166 +1,136 @@
-# ArcGIS Online Authorized-User and `RxBurns_Poly` Setup
+# ArcGIS Online Authorized-User and Related-Table Setup — Version 3.9
 
-## Required production access model
+## 1. Authentication
 
-Use ArcGIS OAuth for California State Parks named users. The browser API key may remain available for public basemaps during development, but it must not be the authorization mechanism for permanent `RxBurns_Poly` edits.
+Use ArcGIS OAuth user authentication for named California State Parks users. Permanent edits to `RxBurns_Poly` and the related tables must be authorized by the signed-in user's privileges; do not use a browser-embedded API key as the editing identity.
 
 ```javascript
 authentication: {
   mode: "oauth",
-  oauthAppId: "PASTE_REGISTERED_APPLICATION_ID_HERE",
+  oauthAppId: "YOUR_REGISTERED_APP_ID",
   oauthPortalUrl: "https://www.arcgis.com",
   requireSignIn: true,
   popup: false,
-  allowedOrganizationId: "PASTE_CA_STATE_PARKS_ORGANIZATION_ID_HERE"
+  allowedOrganizationId: "YOUR_STATE_PARKS_ORG_ID"
 }
 ```
 
-When a valid OAuth application ID is present, the page intentionally does not assign the API key globally. Requests to secured web maps and feature layers then use the signed-in member's ArcGIS credential.
+Register the final HTTPS application URL and exact OAuth redirect URL(s) in ArcGIS Online. Test with a normal staff account, not only an administrator.
 
-## 1. Host and register the application
+## 2. Authoritative feature service
 
-1. Publish this folder at its final HTTPS URL, for example `https://gisapps.parks.ca.gov/cvd-prescribed-fire/`.
-2. In ArcGIS Online, create or update a **Web Mapping Application** item that points to that URL.
-3. Open the application item's **Settings** and register the application.
-4. Add the exact deployed URL as an OAuth redirect URI. Register each separate development, test, and production URL used for sign-in.
-5. Copy the generated App ID into `authentication.oauthAppId`.
-6. Obtain the California State Parks ArcGIS Online organization ID from an administrator and place it in `allowedOrganizationId`.
+Version 3.9 expects `RxBurns_Poly` and the seven related tables to be published in the same FeatureServer. The supplied file geodatabase used these exact table names:
 
-## 2. Share every dependency consistently
+- `Preferred_Weather_Prescriptions`
+- `Forecast_Runs`
+- `Forecast_Periods_and_Scores`
+- `Burn_Events`
+- `Actual_Weather_and_Fire_Behavior`
+- `Notification_Subscriptions`
+- `Notification_Delivery_Log`
 
-Share these items with the same approved State Parks group or with the organization:
-
-- the web map in `arcgis.webMapItemId`;
-- the `RxBurns_Poly` hosted feature layer or hosted feature-layer view;
-- park boundaries and all other secured operational layers;
-- related tables, tile layers, vector tile layers, and images used by the web map.
-
-Test with a normal staff account, not only an administrator. The account must have query access and the appropriate data-editing privilege.
-
-## 3. Configure `RxBurns_Poly` as the authoritative editable layer
-
-The preferred arrangement is for the configured web map to contain the exact `RxBurns_Poly` layer intended for editing. Configure:
+Configure the parent layer normally:
 
 ```javascript
 prescribedBurns: {
   serviceUrl: "https://services2.arcgis.com/.../FeatureServer/0",
   webMapLayerTitle: "RxBurns_Poly",
   layerId: 0,
-  definitionExpression: "",
   allowFeatureServiceEdits: true,
   requireOAuthForEdits: true
 }
 ```
 
-Use the layer endpoint ending in `/FeatureServer/0`, not only the FeatureServer root. If the editable layer is a hosted feature-layer view, use the view's layer URL and configure editing on that view.
+The supplied FGDB parent field is `END_DATE`, so Version 3.9 uses that field as the end-date mapping.
 
-The application chooses the source layer in this order:
-
-1. exact web-map layer title;
-2. exact configured service-layer URL; or
-3. a feature layer whose title contains `RxBurn` or `prescribed burn`.
-
-Temporary score, sketch, smoke, sensitive-area, and point-marker graphics are hidden from the standard Layer List. The source `RxBurns_Poly` layer is the layer used by `queryFeatures()` and `applyEdits()`.
-
-## 4. Required feature-service capabilities
-
-For loading:
-
-- `Query` must be enabled;
-- geometry must be returned;
-- the item must be shared to the signed-in user;
-- the hosted view's definition expression must include the intended records.
-
-For the current form workflow:
-
-- enable **Add** for new burn units;
-- enable **Update** for attribute and geometry edits;
-- enable **Delete** only if an approved deletion workflow is later added;
-- retain editor tracking;
-- restrict editing to authenticated users;
-- configure ownership-based access only if it matches program requirements.
-
-The application evaluates the layer's editing properties and operation capabilities at runtime. A user without add/update authorization receives a visible error rather than a false successful save.
-
-## 5. Fields and domains
-
-The configuration contains preferred field names:
+## 3. Related-table configuration
 
 ```javascript
-fields: {
-  objectId: "OBJECTID",
-  globalId: "GlobalID",
-  name: "BURN_UNIT",
-  parkUnit: "PARK_UNIT",
-  locality: "LOCALITY",
-  state: "STATE",
-  status: "STATUS",
-  priority: "PRIORITY",
-  burnWindow: "BURN_WINDOW",
-  fuel: "FUEL_TYPE",
-  ignitionMethod: "IGNITION_METHOD",
-  acres: "ACRES_BURNED",
-  startDate: "START_DATE",
-  endDate: "COMPLETED_DATE",
-  lastBurned: "LAST_BURNED",
-  objective: "OBJECTIVE",
-  notes: "COMMENTS",
-  lastUpdated: "LAST_UPDATED"
+relatedData: {
+  enabled: true,
+  serviceRoot: "",
+  requireOAuthForEdits: true,
+  loadLatestForecastScoresOnStart: true,
+  tableNames: {
+    weatherPrescriptions: "Preferred_Weather_Prescriptions",
+    forecastRuns: "Forecast_Runs",
+    forecastPeriods: "Forecast_Periods_and_Scores",
+    burnEvents: "Burn_Events",
+    actualWeather: "Actual_Weather_and_Fire_Behavior",
+    notificationSubscriptions: "Notification_Subscriptions",
+    notificationDeliveries: "Notification_Delivery_Log"
+  },
+  export: {
+    filePrefix: "CVD_PrescribedFire_FireEffects_ReportData",
+    includeNotificationData: false
+  }
 }
 ```
 
-After loading the layer, the application reconciles these against actual REST field names and aliases. It uses coded-value domains, including subtype-specific domains, to populate:
+Leave `serviceRoot` blank when the tables are in the same FeatureServer as `RxBurns_Poly`. Version 3.9 derives the service root and discovers numeric table IDs by exact table name, so publishing does not require hard-coded table IDs.
 
-- Park Unit;
-- Locality / County;
-- State;
-- Status;
-- Priority;
-- Burn Window;
-- Primary Fuel; and
-- Ignition Method.
+## 4. Required relationships
 
-Open the browser console and look for `RxBurns_Poly field mapping:`. Confirm every semantic key maps to the intended field. Automatic matching is a safeguard, not a substitute for verifying the authoritative schema.
+Verify the published REST service retains these relationship mappings:
 
-## 6. Direct REST verification
+1. `RxBurns_Poly.GlobalID` → `Preferred_Weather_Prescriptions.BURNUNIT_GUID`
+2. `RxBurns_Poly.GlobalID` → `Forecast_Runs.BURNUNIT_GUID`
+3. `Forecast_Runs.GlobalID` → `Forecast_Periods_and_Scores.FORECASTRUN_GUID`
+4. `RxBurns_Poly.GlobalID` → `Burn_Events.BURNUNIT_GUID`
+5. `Burn_Events.GlobalID` → `Actual_Weather_and_Fire_Behavior.BURNEVENT_GUID`
+6. `RxBurns_Poly.GlobalID` → `Notification_Subscriptions.BURNUNIT_GUID`
+7. `Notification_Subscriptions.GlobalID` → `Notification_Delivery_Log.SUBSCRIPTION_GUID`
 
-While signed in as a normal intended user, open the actual layer URL and run **Query** with:
+## 5. Editing permissions
+
+The intended planner/editor must be able to:
+
+- Query `RxBurns_Poly` and all related tables.
+- Add/update `RxBurns_Poly` where the workflow permits.
+- Add/update `Preferred_Weather_Prescriptions`.
+- Add `Forecast_Runs` and `Forecast_Periods_and_Scores`.
+- Add/update `Burn_Events` and `Actual_Weather_and_Fire_Behavior`.
+- Add/update `Notification_Subscriptions`.
+
+`Notification_Delivery_Log` should normally be written by the approved server-side notification process, not by the browser.
+
+## 6. Runtime verification
+
+After sign-in, open the Account dialog. Expected state:
 
 ```text
-where: 1=1
-returnCountOnly: true
+Related data: Connected
 ```
 
-Expected results:
+If it reports Partial or Unavailable, inspect the detail text and browser console. Common causes are a table renamed during publishing, a table not included in the service, inconsistent sharing, or insufficient query privileges.
 
-- a count greater than zero means the view is accessible and contains records;
-- zero means the layer is accessible but the view/filter contains no records;
-- token required or permission denied means sharing/authentication is incomplete;
-- layer not found means the service URL or layer number is wrong.
+## 7. REST verification
 
-Also verify that the REST layer page lists the intended coded-value domains and editing capabilities.
+At the FeatureServer root, confirm `tables` lists all seven exact names. Open each table endpoint and confirm Query and the intended Add/Update capabilities for the same non-admin account that will use the app.
 
-## 7. Why the Burn List previously displayed zero records
+## 8. Report-data download
 
-The previous filter logic converted blank year fields with `Number("")`, which produces `0`. The blank **Last Burned Year (To)** field therefore behaved as year zero and rejected every normal record. Version 3.2 treats blank years as `null` and only applies the year comparison when the user enters a value.
+The Burn List **Download report data** button reads the current source layer and all configured related tables. Notification names/email addresses and individual delivery records are excluded by default. See `FIRE_EFFECTS_REPORT_EXPORT.md`.
 
-## 8. Production data still needing related tables
+## 9. Schema note
 
-`RxBurns_Poly` can be the authoritative burn-unit geometry and attributes layer. Durable production storage should use related hosted tables for:
+The supplied `Actual_Weather_and_Fire_Behavior` table lacks a dedicated probability-of-precipitation field. Version 3.9 places an entered POP value into `OBS_NOTES`. Add `POP_PCT` later if independent querying/reporting is needed.
 
-- preferred weather prescriptions;
-- forecast snapshots and scores;
-- burn events and actual weather;
-- notification subscribers and delivery status.
 
-Use GlobalID-to-GUID relationships and authenticated edits. Subscriber email addresses should be handled through an approved secured service rather than exposed or retained only in browser memory.
+## Version 3.9 published table-name verification
 
-## Troubleshooting
+The supplied staging geodatabase metadata shows the published `CVD_PrescribedFire_StagingMap` FeatureServer using these service table names and IDs:
 
-1. Confirm the app is served over HTTP/HTTPS, not `file:///`.
-2. Confirm the OAuth redirect URI exactly matches the deployed application URL.
-3. Confirm the user belongs to the organization/group sharing every dependency.
-4. Confirm `RxBurns_Poly` is the intended layer or view and the URL ends in `/FeatureServer/<layerId>`.
-5. Confirm add/update capability with the same non-admin user.
-6. Open Developer Tools and inspect Console and Network requests for `/query`, `/applyEdits`, `/sharing/rest/oauth2/authorize`, and NWS `/points/` requests.
-7. Confirm the web map does not contain a second similarly named burn layer that could be selected unintentionally.
+| ID | Published table name | File-geodatabase dataset |
+|---:|---|---|
+| 10 | Preferred Weather Prescriptions | Preferred_Weather_Prescriptions |
+| 20 | Forecast Runs | Forecast_Runs |
+| 21 | Forecast Periods and Scores | Forecast_Periods_and_Scores |
+| 30 | Burn Events | Burn_Events |
+| 31 | Actual Weather and Fire Behavior | Actual_Weather_and_Fire_Behavior |
+| 40 | Notification Subscriptions | Notification_Subscriptions |
+| 41 | Notification Delivery Log | Notification_Delivery_Log |
+
+Version 3.9 resolves tables by stable ID first and normalized name second. Do not change these IDs during an overwrite.
+
+Before entering records, open the application Account dialog and confirm **Related data: Connected (7/7)**. If the status is Partial or Unavailable, do not continue data entry; review the status detail and browser console. A save operation now fails visibly instead of falling back to browser-only state.

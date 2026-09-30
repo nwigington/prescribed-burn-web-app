@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Prescribed Fire Operations Hub</title>
 
-    <script src="./config.js"></script>
+    <script src="./config.js?v=3.11"></script>
     <script>
       const authConfig = window.APP_CONFIG.authentication || {};
       const oauthConfigured =
@@ -29,7 +29,7 @@
       };
     </script>
     <script type="module" src="https://js.arcgis.com/5.1/"></script>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=3.11" />
   </head>
 
   <body class="calcite-mode-dark">
@@ -77,7 +77,7 @@
           </p>
 
 
-          <arcgis-map id="map" tabindex="0" popup-disabled attribution-mode="dark">
+          <arcgis-map id="map" tabindex="0" attribution-mode="dark">
             <arcgis-zoom slot="top-left"></arcgis-zoom>
             <arcgis-home slot="top-left"></arcgis-home>
             <arcgis-locate slot="top-left"></arcgis-locate>
@@ -179,6 +179,21 @@
 
           <div class="map-instruction" role="note">Select a burn unit for details, or click an empty map location for a point forecast.</div>
         </section>
+
+        <div
+          id="operationsPanelResizer"
+          class="operations-panel-resizer"
+          role="separator"
+          aria-controls="operations-panel"
+          aria-orientation="vertical"
+          aria-valuemin="320"
+          aria-valuemax="600"
+          aria-valuenow="448"
+          tabindex="0"
+          title="Resize operations panel"
+        >
+          <span class="sr-only">Resize operations panel</span>
+        </div>
 
         <button
   id="operationsPanelToggle"
@@ -294,7 +309,10 @@
           <section id="panel-list" class="panel-view panel-view--wide" role="tabpanel" aria-labelledby="tab-list" data-view="list" hidden>
             <div class="panel-heading-row">
               <div><p class="section-kicker">Records and filters</p><h2>Burn List</h2></div>
-              <span id="burnResultCount" class="result-count" aria-live="polite">0 records</span>
+              <div class="panel-heading-actions">
+                <span id="burnResultCount" class="result-count" aria-live="polite">0 records</span>
+                <button id="downloadReportDataButton" class="secondary-button secondary-button--compact" type="button" title="Download burn-unit and related fire-effects data as JSON">Download report data</button>
+              </div>
             </div>
 
             <details class="filter-disclosure" open>
@@ -409,7 +427,8 @@
                 <div class="table-scroll" tabindex="0" aria-label="Scrollable seven-day burn forecast table">
                   <table class="forecast-matrix"><thead id="forecastMatrixHead"></thead><tbody id="forecastMatrixBody"></tbody></table>
                 </div>
-                <div class="resource-links-row resource-links-row--three">
+                <p class="source-note">Daytime relative humidity is the minimum hourly NWS RH forecast within each daytime period. Atmospheric Dispersion Index (ADI) and LVORI are read from the raw NWS grid when the issuing Weather Forecast Office provides those layers; otherwise they remain n/a and are excluded from scoring.</p>
+                <div class="resource-links-row resource-links-row--three weather-resource-actions">
                   <a id="spotForecastUnitLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a>
                   <a id="pointForecastLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Point Forecast</a>
                   <a id="fireWeatherDashboardUnitLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">Fire Weather Dashboard</a>
@@ -434,7 +453,7 @@
               <section class="weather-summary" aria-labelledby="weatherLocation"><div><p id="weatherCoordinates" class="section-kicker"></p><h3 id="weatherLocation">Selected location</h3></div><div class="current-condition"><strong id="weatherTemperature">—</strong><span id="weatherShortForecast">—</span></div></section>
               <dl class="condition-grid"><div><dt>Relative humidity</dt><dd id="weatherHumidity">—</dd></div><div><dt>Wind</dt><dd id="weatherWind">—</dd></div><div><dt>Wind gust</dt><dd id="weatherGust">—</dd></div><div><dt>Precipitation</dt><dd id="weatherPrecip">—</dd></div></dl>
               <section class="content-section"><h3>Next 12 Hours</h3><div class="table-scroll" tabindex="0" aria-label="Scrollable hourly weather forecast table"><table class="forecast-table"><thead><tr><th scope="col">Time</th><th scope="col">Conditions</th><th scope="col">Temp.</th><th scope="col">RH</th><th scope="col">Wind</th><th scope="col">Gust</th></tr></thead><tbody id="hourlyForecastRows"></tbody></table></div></section>
-              <div class="resource-links-row"><a id="spotForecastPlannerLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a><a id="forecastOfficeLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Forecast Office</a></div>
+              <div class="resource-links-row weather-resource-actions"><a id="spotForecastPlannerLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a><a id="forecastOfficeLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Forecast Office</a></div>
               <p class="source-note">Forecasts are planning information and do not replace an approved burn plan, official spot forecast, permit, smoke-management authorization, or field go/no-go determination.</p>
             </div>
           </section>
@@ -487,8 +506,118 @@
           <div class="field-group"><label for="treatmentType">RX Fire Treatment Type <span aria-hidden="true">*</span></label><select id="treatmentType" required><option value="">Select Treatment</option><option>Broadcast Burn</option><option>Machine Pile Burn</option><option>Hand Pile Burn</option></select></div>
           <div class="field-group"><label for="plannedAcres">Planned Acres <span aria-hidden="true">*</span></label><input id="plannedAcres" type="number" min="0" step="0.01" required /></div>
           <div class="field-group"><label for="actualAcres">Actual Acres Burned</label><input id="actualAcres" type="number" min="0" step="0.01" /></div>
-          <div class="field-group field-group--wide"><label for="eventNotes">Burn Event Notes</label><textarea id="eventNotes" rows="4" placeholder="Ignition technique, weather and smoke conditions, intensity, coverage, effectiveness, and follow-up needs"></textarea></div>
-          <fieldset class="field-group field-group--wide"><legend>Actual Weather Conditions</legend><div id="actualWeatherFields" class="conditions-grid conditions-grid--nested"></div></fieldset>
+          <fieldset class="field-group field-group--wide">
+  <legend>Operations and Authorization</legend>
+
+  <div class="form-grid">
+
+    <div class="field-group">
+      <label for="eventBurnBoss">Burn Boss</label>
+      <input
+        id="eventBurnBoss"
+        type="text"
+        maxlength="100"
+        autocomplete="off"
+      />
+    </div>
+
+    <div class="field-group">
+      <label for="eventPermitRef">Permit / Authorization</label>
+      <input
+        id="eventPermitRef"
+        type="text"
+        maxlength="100"
+        placeholder="Permit, smoke authorization, or approval reference"
+      />
+    </div>
+
+    <div class="field-group">
+      <label for="eventSpotForecastId">NWS Spot Forecast ID</label>
+      <input
+        id="eventSpotForecastId"
+        type="text"
+        inputmode="numeric"
+        maxlength="50"
+        placeholder="Example: 2600999"
+      />
+    </div>
+
+    <div class="field-group">
+      <label for="eventSpotForecastUrl">NWS Spot Forecast URL</label>
+      <input
+        id="eventSpotForecastUrl"
+        type="url"
+        maxlength="500"
+        placeholder="https://spot.weather.gov/forecasts/..."
+      />
+    </div>
+
+    <p class="panel-help field-group--wide">
+      After NWS creates the Spot Forecast, paste its forecast URL here. The application will extract the numeric Spot Forecast ID automatically. If you enter only the numeric ID, the forecast URL will be created automatically when the event is saved.
+    </p>
+
+  </div>
+</fieldset>
+
+<fieldset class="field-group field-group--wide">
+  <legend>Burn Results and Effectiveness</legend>
+
+  <div class="form-grid">
+
+    <div class="field-group">
+      <label for="eventIntensityClass">Fire Intensity</label>
+      <select id="eventIntensityClass">
+        <option value="">Not entered</option>
+      </select>
+    </div>
+
+    <div class="field-group">
+      <label for="eventCoveragePct">Burn Coverage (%)</label>
+      <input
+        id="eventCoveragePct"
+        type="number"
+        min="0"
+        max="100"
+        step="0.1"
+      />
+    </div>
+
+    <div class="field-group field-group--wide">
+      <label for="eventEffectiveness">
+        Effectiveness / Objectives Met
+      </label>
+      <textarea
+        id="eventEffectiveness"
+        rows="3"
+        maxlength="1000"
+        placeholder="Describe how well the treatment met the burn objectives"
+      ></textarea>
+    </div>
+
+    <div class="field-group field-group--wide">
+      <label for="eventFollowUp">Follow-Up Needs</label>
+      <textarea
+        id="eventFollowUp"
+        rows="3"
+        maxlength="1000"
+        placeholder="Additional burning, monitoring, invasive treatment, rehabilitation, etc."
+      ></textarea>
+    </div>
+
+    <div class="field-group field-group--wide">
+      <label for="eventSmokeNotes">Smoke Conditions and Impacts</label>
+      <textarea
+        id="eventSmokeNotes"
+        rows="3"
+        maxlength="1000"
+        placeholder="Smoke dispersion, visibility, sensitive receptors, road impacts, complaints, or mitigation actions"
+      ></textarea>
+    </div>
+
+  </div>
+</fieldset>
+          <div class="field-group field-group--wide"><label for="eventNotes">Burn Event Notes</label><textarea id="eventNotes" rows="4" maxlength="2000" placeholder="Enter any additional operational notes not captured above."></textarea></div>
+          <fieldset class="field-group field-group--wide"><legend>Actual Weather and Fire Behavior</legend><div id="actualWeatherFields" class="conditions-grid conditions-grid--nested"></div></fieldset>
         </div>
         <div class="dialog-actions"><button class="secondary-button" type="button" data-close-dialog="eventDialog">Cancel</button><button class="primary-button" type="submit">Save Burn Event</button></div>
       </form>
@@ -516,6 +645,8 @@
       <div class="dialog-content">
         <p><strong>Status:</strong> <span id="accountStatus">Not signed in</span></p>
         <p id="accountUser" class="panel-help">Configure ArcGIS OAuth in <code>config.js</code> to use organization-only maps and layers.</p>
+        <p><strong>Related data:</strong> <span id="relatedDataStatus">Not initialized</span></p>
+        <p id="relatedDataDetail" class="panel-help">Preferred prescriptions, forecasts, burn events, actual weather, and subscribers will be stored in related tables when available.</p>
         <div class="button-row">
           <button id="arcgisSignInButton" class="primary-button" type="button">Sign in with ArcGIS</button>
           <button id="logoutButton" class="secondary-button" type="button" disabled>Log out</button>
@@ -523,6 +654,6 @@
       </div>
     </dialog>
 
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./app.js?v=3.11"></script>
   </body>
 </html>

@@ -80,3 +80,19 @@ The Map Tools Identify tab includes a keyboard-operable **Clear selection** butt
 * The default ArcGIS popup is disabled to prevent overlapping interactive controls and duplicate feature-detail presentations. Selected burn-unit information remains available in the keyboard-operable Identify panel and Burn List.
 * Dashboard statistical-card labels and values are centered without changing reading order or semantic markup.
 
+
+## Version 3.7 responsive layout
+
+- Responsive behavior uses reflow rather than global CSS zoom or transform scaling.
+- The desktop operations-panel divider uses `role="separator"`, exposes minimum/maximum/current width values, and supports keyboard resizing.
+- The Map Tools drawer maintains a fixed header and tool tabs while only its active content area scrolls.
+- At tablet widths the operations panel moves below the map, avoiding an excessively narrow side panel.
+- At phone widths Map Tools becomes a bottom sheet and navigation remains horizontally scrollable.
+- Compact-height rules reduce spacing and padding rather than shrinking core text or interactive targets.
+- Forecast tables retain local horizontal scrolling so values remain readable at browser zoom and narrow widths.
+
+## Version 3.8 related data and report export
+
+- The Burn List report-data download is a native keyboard-operable button with a text label and busy/disabled state while the file is assembled.
+- Related-data connection status is exposed as text in the Account dialog rather than color alone.
+- Related-table failures use the application's live-status announcements and do not remove the non-map Burn List alternative.

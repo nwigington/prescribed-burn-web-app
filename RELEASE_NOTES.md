@@ -1,3 +1,148 @@
+# Release Notes — Version 3.10
+
+## Burn-event and actual-weather completion
+
+Version 3.10 completes the burn-event form work started after Version 3.9 and uses the fields already present in the supplied `CVD_PrescribedFire_StagingMap_FL.gdb` schema.
+
+### Burn Events
+
+The burn-event dialog now persists and reloads:
+
+- Burn Boss (`BURN_BOSS`)
+- Permit / Authorization (`PERMIT_REF`)
+- NWS Spot Forecast ID (`SPOT_FORECAST_ID`)
+- NWS Spot Forecast URL (`SPOT_FORECAST_URL`)
+- Observed Fire Intensity (`INTENSITY_CLASS`)
+- Coverage (%) (`COVERAGE_PCT`)
+- Effectiveness (`EFFECTIVENESS`)
+- Follow-Up Needs (`FOLLOW_UP`)
+- Smoke Conditions and Impacts (`SMOKE_NOTES`)
+- Burn Event Notes (`EVENT_NOTES`)
+
+The fire-intensity list is read from the ArcGIS Online coded-value domain when available. The file-geodatabase fallback values are Low, Moderate, High, and Extreme.
+
+### Actual Weather and Fire Behavior
+
+`ACTUAL_WEATHER_FIELDS` is now a definition-based structure rather than a two-value array. The form builder can create number inputs, coded direction lists, and multiline text controls from those definitions.
+
+Newly exposed fields include:
+
+- Flame Length (`FLAME_LENGTH_FT`)
+- Rate of Spread (`ROS_FT_MIN`)
+- Observed Smoke Direction (`SMOKE_DIR`)
+- Smoke Behavior (`SMOKE_BEHAVIOR`)
+- Observation Notes (`OBS_NOTES`)
+
+Wind and smoke direction controls use the published coded-value domain when available, including Calm and Variable.
+
+The existing web-app Probability of Precipitation value is retained through `OBS_NOTES` because the supplied `Actual_Weather_and_Fire_Behavior` table does not contain a dedicated `POP_PCT` field. Version 3.10 separates that generated note from user-entered observation notes when records are loaded again.
+
+### NWS Spot Forecast
+
+When a user pastes a URL such as `https://spot.weather.gov/forecasts/2600999`, the numeric Spot Forecast ID is extracted automatically. If only the numeric ID is entered, the forecast URL is constructed when the event is saved.
+
+### Validation
+
+- `app.js` passes `node --check`.
+- `config.js` passes `node --check`.
+- No duplicate HTML IDs were detected.
+- All HTML label targets and `aria-controls` targets resolve.
+- All cached DOM references resolve to existing elements.
+- Stylesheet brace validation passes.
+- `config.js` and `styles.css` are unchanged from Version 3.9.
+
+
+---
+
+# Release Notes — Version 3.9
+
+## Critical related-table persistence correction
+
+Live testing showed that burn events could appear in the interface but disappear after refresh because Version 3.8 did not discover the published related tables.
+
+### Root cause
+
+The file geodatabase uses dataset names with underscores, such as `Burn_Events`, while the published ArcGIS Online FeatureServer exposes display names with spaces, such as `Burn Events`. Version 3.8 required an exact normalized string match that preserved underscores, so all seven table lookups could fail. The write functions then returned early when related storage was unavailable, allowing the UI to add the temporary in-memory record and announce apparent success.
+
+### Corrections
+
+- Uses the actual published table display names.
+- Adds stable table-ID fallbacks: 10, 20, 21, 30, 31, 40, and 41.
+- Normalizes punctuation, spaces, underscores, and case during discovery.
+- Prefers the configured authoritative staging FeatureServer when locating related tables instead of a potentially unrelated web-map view.
+- Removes silent no-op persistence behavior.
+- Validates add/update capability before related edits.
+- Reads each saved related record back from ArcGIS Online before reporting success.
+- Shows a blocking alert when a burn-event or preferred-condition save is not persisted.
+- Expands the Account dialog status details with the discovered table names and IDs.
+
+### Expected production status
+
+Before entering related data, the Account dialog should show `Connected (7/7)`.
+
+
+---
+
+# Release Notes — Version 3.8
+
+## Related-table persistence
+
+Version 3.8 was built against the supplied `CVD_PrescribedFire_StagingMap_FL.gdb` schema. The application now discovers the published related tables from the same FeatureServer as `RxBurns_Poly` and uses OAuth-authenticated `FeatureLayer.applyEdits()` calls for durable storage.
+
+Implemented tables:
+
+- `Preferred_Weather_Prescriptions`
+- `Forecast_Runs`
+- `Forecast_Periods_and_Scores`
+- `Burn_Events`
+- `Actual_Weather_and_Fire_Behavior`
+- `Notification_Subscriptions`
+- `Notification_Delivery_Log` (read-only from the browser)
+
+### Workflow changes
+
+- Preferred weather prescriptions load from and save to `Preferred_Weather_Prescriptions`.
+- A successful forecast refresh creates one `Forecast_Runs` record and up to seven related `Forecast_Periods_and_Scores` records.
+- Latest persisted forecast scores are loaded on application startup so Dashboard/Burn List scores survive browser reloads.
+- Burn events save to `Burn_Events`; entered actual weather/fire-behavior values save to `Actual_Weather_and_Fire_Behavior`.
+- Notification subscribers save to `Notification_Subscriptions`; removal deactivates the subscription instead of deleting the audit record.
+- Notification delivery history remains server-side/read-only in the browser application.
+- The Account dialog reports related-data connection status and missing-table diagnostics.
+
+## Fire-effects report-data export
+
+The Burn List includes **Download report data**. It generates a date-stamped JSON file containing each burn unit and the related planning/monitoring data needed as a future fire-effects-report input:
+
+- authoritative `RxBurns_Poly` attributes;
+- polygon geometry;
+- preferred weather prescriptions;
+- forecast runs;
+- forecast periods and scores;
+- burn events; and
+- actual weather/fire-behavior observations.
+
+Notification email addresses and delivery detail are excluded by default because they contain personal/administrative information and are not normally needed for fire-effects reporting. Set `relatedData.export.includeNotificationData` to `true` only for an authorized administrative export.
+
+## Schema-specific correction
+
+The supplied `Actual_Weather_and_Fire_Behavior` table does not contain `POP_PCT`. When probability of precipitation is entered in the current UI, Version 3.8 preserves that value in `OBS_NOTES`. Add a dedicated `POP_PCT` Double field in a future schema revision if that value needs independent reporting/querying.
+
+## Existing behavior retained
+
+Version 3.8 retains the Version 3.7 responsive layout, resizable operations panel, OAuth/Microsoft 365 sign-in, `RxBurns_Poly` editing workflow, NWS alert and forecast workflows, Map Tools behavior, accessibility features, and California State Parks styling.
+
+
+# Release Notes — Version 3.7
+
+## Responsive and adaptive layout
+
+* Added user-resizable desktop operations panel with pointer and keyboard control.
+* Added height-aware compact-laptop styling and container-query reflow for weather/operations content.
+* Reworked Map Tools so header/tabs remain visible while the active tool content scrolls.
+* Added tablet stacked layout and phone bottom-sheet Map Tools behavior.
+* Added local weather-table scrolling and narrower readable table minimums on laptops.
+* Preserved Version 3.6 OAuth, web map, service, NWS, and RxBurns_Poly configuration.
+
 # Release Notes — Version 3.5
 
 ## Targeted production-preparation corrections
