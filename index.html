@@ -125,7 +125,7 @@
                 <dl id="identifyDetails" class="detail-list"></dl>
                 <div class="stacked-actions">
                   <button id="manageSelectedUnit" class="primary-button" type="button">Manage burn unit</button>
-                  <button id="updateSelectedForecast" class="secondary-button" type="button">Update forecast data</button>
+                  <button id="updateSelectedForecast" class="secondary-button" type="button">Update Forecast</button>
                 </div>
                 <details class="conditions-disclosure">
                   <summary>Preferred burn conditions</summary>
@@ -423,7 +423,56 @@
               </section>
 
               <section class="content-section">
-                <div class="section-heading-row"><div><h3>Weather / Fire-Behavior Factors</h3><p id="forecastUpdated" class="quiet-status">Not Updated</p></div><div class="button-row"><button id="refreshUnitForecastButton" class="secondary-button" type="button">Update Forecast Data</button><button id="expandForecastButton" class="secondary-button" type="button" aria-haspopup="dialog" aria-controls="forecastDialog">Expand Forecast</button><button id="editConditionsButton2" class="secondary-button" type="button">Edit Conditions</button></div></div>
+                <div class="section-heading-row forecast-heading-row">
+
+  <div class="forecast-heading-copy">
+    <h3>Weather / Fire-Behavior Factors</h3>
+    <p
+      id="forecastUpdated"
+      class="quiet-status"
+    >
+      Not Updated
+    </p>
+  </div>
+
+  <div
+    class="forecast-heading-actions"
+    aria-label="Forecast actions"
+  >
+
+    <button
+      id="refreshUnitForecastButton"
+      class="secondary-button"
+      type="button"
+      aria-label="Update forecast data"
+      title="Update forecast data"
+    >
+      Update Forecast
+    </button>
+
+    <button
+      id="expandForecastButton"
+      class="secondary-button"
+      type="button"
+      aria-haspopup="dialog"
+      aria-controls="forecastDialog"
+      title="Open the full seven-day forecast"
+    >
+      Expand Forecast
+    </button>
+
+    <button
+      id="editConditionsButton2"
+      class="secondary-button"
+      type="button"
+      title="Edit preferred weather conditions"
+    >
+      Edit Conditions
+    </button>
+
+  </div>
+
+</div>
                 <div class="table-scroll" tabindex="0" aria-label="Scrollable seven-day burn forecast table">
                   <table class="forecast-matrix"><thead id="forecastMatrixHead"></thead><tbody id="forecastMatrixBody"></tbody></table>
                 </div>
