@@ -474,7 +474,7 @@ function cacheDom() {
     "addBurnEventButton", "eventTableBody", "weatherLoading", "weatherEmpty",
     "weatherContent", "weatherCoordinates", "weatherLocation", "weatherTemperature",
     "weatherShortForecast", "weatherHumidity", "weatherWind", "weatherGust", "weatherPrecip",
-    "hourlyForecastRows", "focusMapButton", "supportContact", "helpButton", "helpDialog",
+    "hourlyForecastRows", "expandHourlyForecastButton", "hourlyForecastDialog", "hourlyForecastDialogTitle", "hourlyForecastDialogLocation", "hourlyForecastDialogUpdated", "hourlyForecastDialogHead", "hourlyForecastDialogBody", "focusMapButton", "supportContact", "helpButton", "helpDialog",
     "helpContact", "unitDialog", "unitForm", "unitDialogTitle", "unitId", "unitName", "unitPark", "saveUnitButton",
     "unitBurnWindow", "unitAcres", "unitState", "unitLocality", "unitStatus", "unitPriority",
     "unitFuel", "unitIgnition", "unitObjective", "unitNotes", "conditionsDialog",
@@ -3454,7 +3454,7 @@ function initializeDialogs() {
   document.querySelectorAll("[data-close-dialog]").forEach((button) => {
     button.addEventListener("click", () => closeDialog(button.dataset.closeDialog));
   });
-  [dom.unitDialog, dom.conditionsDialog, dom.eventDialog, dom.forecastDialog, dom.confirmDialog, dom.helpDialog, dom.accountDialog].forEach((dialog) => {
+  [dom.unitDialog, dom.conditionsDialog, dom.eventDialog, dom.forecastDialog, dom.hourlyForecastDialog, dom.confirmDialog, dom.helpDialog, dom.accountDialog].forEach((dialog) => {
     dialog.addEventListener("click", (event) => {
       const bounds = dialog.getBoundingClientRect();
       const outside = event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom;
@@ -3489,6 +3489,7 @@ function initializeFormsAndControls() {
   dom.helpButton.addEventListener("click", () => dom.helpDialog.showModal());
   dom.accountButton.addEventListener("click", () => dom.accountDialog.showModal());
   dom.expandForecastButton?.addEventListener("click", openForecastDialog);
+  dom.expandHourlyForecastButton?.addEventListener("click", openHourlyForecastDialog);
   dom.arcgisSignInButton.addEventListener("click", signInUser);
   dom.logoutButton.addEventListener("click", signOutUser);
   dom.mapToolsToggle.addEventListener("click", () => dom.mapToolsDrawer.hidden ? openMapTools() : closeMapTools());
@@ -4336,6 +4337,12 @@ function resetPointForecastPanel() {
   dom.weatherGust.textContent = "—";
   dom.weatherPrecip.textContent = "—";
   dom.hourlyForecastRows.replaceChildren();
+  if (dom.expandHourlyForecastButton) dom.expandHourlyForecastButton.disabled = true;
+  if (dom.hourlyForecastDialog?.open) dom.hourlyForecastDialog.close();
+  if (dom.hourlyForecastDialogHead) dom.hourlyForecastDialogHead.replaceChildren();
+  if (dom.hourlyForecastDialogBody) dom.hourlyForecastDialogBody.replaceChildren();
+  if (dom.hourlyForecastDialogLocation) dom.hourlyForecastDialogLocation.textContent = "No forecast location selected";
+  if (dom.hourlyForecastDialogUpdated) dom.hourlyForecastDialogUpdated.textContent = "";
   setWeatherLoading(false, "Select a Location");
 }
 
@@ -4473,7 +4480,7 @@ function showWeatherError(message) {
   dom.weatherEmpty.querySelector("p").textContent = `${message} Select Go To Map and choose another California location, or try again.`;
 }
 
-function renderPointForecast({ latitude, longitude, pointData, hourly }) {
+function renderPointForecast({ latitude, longitude, pointData, hourly, updated }) {
   const first = hourly[0];
   const relativeLocation = pointData.properties?.relativeLocation?.properties;
   const cityState = [relativeLocation?.city, relativeLocation?.state].filter(Boolean).join(", ");
@@ -4509,6 +4516,10 @@ function renderPointForecast({ latitude, longitude, pointData, hourly }) {
   dom.weatherEmpty.querySelector("p").textContent = "Click a location on the map or select a burn unit to retrieve a National Weather Service forecast.";
   dom.weatherEmpty.hidden = true;
   dom.weatherContent.hidden = false;
+  if (dom.expandHourlyForecastButton) dom.expandHourlyForecastButton.disabled = false;
+  if (dom.hourlyForecastDialog?.open) {
+    syncExpandedHourlyForecastTable({ latitude, longitude, pointData, hourly, updated });
+  }
 }
 
 function enrichDailyForecastPeriods(periods, gridProperties, hourlyPeriods = []) {
@@ -4726,6 +4737,71 @@ function scoreForecastPeriod(period, preferred) {
     if (preferred.transportWindDirection.includes(available.transportWindDirection)) matched += 1;
   }
   return considered ? Math.round((matched / considered) * 100) : null;
+}
+
+
+function syncExpandedHourlyForecastTable(payload = state.lastPointForecast) {
+  if (!dom.hourlyForecastDialogHead || !dom.hourlyForecastDialogBody) return;
+
+  const sourceTable = dom.hourlyForecastRows?.closest("table");
+  const sourceHead = sourceTable?.querySelector("thead");
+  if (!sourceHead) return;
+
+  dom.hourlyForecastDialogHead.replaceChildren(
+    ...Array.from(sourceHead.children).map((node) => node.cloneNode(true))
+  );
+  dom.hourlyForecastDialogBody.replaceChildren(
+    ...Array.from(dom.hourlyForecastRows.children).map((node) => node.cloneNode(true))
+  );
+
+  if (!payload) {
+    if (dom.hourlyForecastDialogLocation) {
+      dom.hourlyForecastDialogLocation.textContent = "No forecast location selected";
+    }
+    if (dom.hourlyForecastDialogUpdated) {
+      dom.hourlyForecastDialogUpdated.textContent = "";
+    }
+    return;
+  }
+
+  const relativeLocation = payload.pointData?.properties?.relativeLocation?.properties;
+  const cityState = [relativeLocation?.city, relativeLocation?.state].filter(Boolean).join(", ");
+  const coordinates = Number.isFinite(payload.latitude) && Number.isFinite(payload.longitude)
+    ? `${payload.latitude.toFixed(4)}, ${payload.longitude.toFixed(4)}`
+    : "";
+
+  if (dom.hourlyForecastDialogLocation) {
+    dom.hourlyForecastDialogLocation.textContent = cityState
+      ? `${cityState}${coordinates ? ` • ${coordinates}` : ""}`
+      : (coordinates || "Selected forecast location");
+  }
+
+  if (dom.hourlyForecastDialogUpdated) {
+    dom.hourlyForecastDialogUpdated.textContent = payload.updated
+      ? `Forecast loaded ${formatDateTime(payload.updated)}`
+      : "";
+  }
+}
+
+function openHourlyForecastDialog() {
+  const payload = state.lastPointForecast;
+  if (!payload || !dom.hourlyForecastDialog || !dom.hourlyForecastRows?.children?.length) {
+    announce("Select a location and load a point forecast before expanding the 12-hour forecast.");
+    return;
+  }
+
+  const relativeLocation = payload.pointData?.properties?.relativeLocation?.properties;
+  const cityState = [relativeLocation?.city, relativeLocation?.state].filter(Boolean).join(", ");
+  dom.hourlyForecastDialogTitle.textContent = cityState
+    ? `${cityState} — 12-Hour Point Forecast`
+    : "12-Hour Point Forecast";
+
+  syncExpandedHourlyForecastTable(payload);
+  dom.hourlyForecastDialog.showModal();
+
+  window.requestAnimationFrame(() => {
+    dom.hourlyForecastDialog.querySelector(".table-scroll--hourly-expanded")?.focus();
+  });
 }
 
 function syncExpandedForecastTable() {

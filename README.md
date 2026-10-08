@@ -1,3 +1,7 @@
+# Version 3.13 update
+
+The Weather & Smoke point-forecast panel now includes an expandable 12-hour forecast table. See `RELEASE_NOTES_v3_13.md`.
+
 # California State Parks Prescribed Fire Operations Hub — Version 3.10
 
 This package is a static ArcGIS Maps SDK for JavaScript application built with vanilla HTML, CSS, and JavaScript through the ArcGIS CDN. Version 3.10 builds on the working Version 3.9 related-table persistence and completes the Burn Event and Actual Weather / Fire Behavior form mappings using the supplied `CVD_PrescribedFire_StagingMap_FL.gdb` schema. It preserves the current ArcGIS Online OAuth workflow, web map, `RxBurns_Poly`, related-table discovery, responsive layout, NWS workflows, and report-data export.

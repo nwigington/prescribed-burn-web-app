@@ -10,7 +10,7 @@
     <meta name="color-scheme" content="dark" />
     <title>Prescribed Fire Operations Hub</title>
 
-    <script src="./config.js?v=3.12"></script>
+    <script src="./config.js?v=3.13"></script>
     <script>
       const authConfig = window.APP_CONFIG.authentication || {};
       const oauthConfigured =
@@ -29,7 +29,7 @@
       };
     </script>
     <script type="module" src="https://js.arcgis.com/5.1/"></script>
-    <link rel="stylesheet" href="./styles.css?v=3.12" />
+    <link rel="stylesheet" href="./styles.css?v=3.13" />
   </head>
 
   <body class="calcite-mode-dark">
@@ -423,7 +423,17 @@
               </section>
 
               <section class="content-section">
-                <div class="section-heading-row"><div><h3>Weather / Fire-Behavior Factors</h3><p id="forecastUpdated" class="quiet-status">Not Updated</p></div><div class="button-row"><button id="refreshUnitForecastButton" class="secondary-button" type="button">Update Forecast Data</button><button id="expandForecastButton" class="secondary-button" type="button" aria-haspopup="dialog" aria-controls="forecastDialog">Expand Forecast</button><button id="editConditionsButton2" class="secondary-button" type="button">Edit Conditions</button></div></div>
+                <div class="section-heading-row forecast-heading-row">
+                  <div class="forecast-heading-copy">
+                    <h3>Weather / Fire-Behavior Factors</h3>
+                    <p id="forecastUpdated" class="quiet-status">Not Updated</p>
+                  </div>
+                  <div class="forecast-heading-actions" aria-label="Forecast actions">
+                    <button id="refreshUnitForecastButton" class="secondary-button" type="button" aria-label="Update forecast data" title="Update forecast data">Update Forecast</button>
+                    <button id="expandForecastButton" class="secondary-button" type="button" aria-haspopup="dialog" aria-controls="forecastDialog" title="Open the full seven-day forecast">Expand Forecast</button>
+                    <button id="editConditionsButton2" class="secondary-button" type="button" title="Edit preferred weather conditions">Edit Conditions</button>
+                  </div>
+                </div>
                 <div class="table-scroll" tabindex="0" aria-label="Scrollable seven-day burn forecast table">
                   <table class="forecast-matrix"><thead id="forecastMatrixHead"></thead><tbody id="forecastMatrixBody"></tbody></table>
                 </div>
@@ -452,7 +462,27 @@
             <div id="weatherContent" hidden>
               <section class="weather-summary" aria-labelledby="weatherLocation"><div><p id="weatherCoordinates" class="section-kicker"></p><h3 id="weatherLocation">Selected location</h3></div><div class="current-condition"><strong id="weatherTemperature">—</strong><span id="weatherShortForecast">—</span></div></section>
               <dl class="condition-grid"><div><dt>Relative humidity</dt><dd id="weatherHumidity">—</dd></div><div><dt>Wind</dt><dd id="weatherWind">—</dd></div><div><dt>Wind gust</dt><dd id="weatherGust">—</dd></div><div><dt>Precipitation</dt><dd id="weatherPrecip">—</dd></div></dl>
-              <section class="content-section"><h3>Next 12 Hours</h3><div class="table-scroll" tabindex="0" aria-label="Scrollable hourly weather forecast table"><table class="forecast-table"><thead><tr><th scope="col">Time</th><th scope="col">Conditions</th><th scope="col">Temp.</th><th scope="col">RH</th><th scope="col">Wind</th><th scope="col">Gust</th></tr></thead><tbody id="hourlyForecastRows"></tbody></table></div></section>
+              <section class="content-section">
+                <div class="section-heading-row hourly-forecast-heading-row">
+                  <h3>Next 12 Hours</h3>
+                  <button
+                    id="expandHourlyForecastButton"
+                    class="secondary-button hourly-forecast-expand-button"
+                    type="button"
+                    aria-haspopup="dialog"
+                    aria-controls="hourlyForecastDialog"
+                    aria-label="Expand the 12-hour point forecast"
+                    title="Open the full 12-hour point forecast"
+                    disabled
+                  >Expand Forecast</button>
+                </div>
+                <div class="table-scroll" tabindex="0" aria-label="Scrollable hourly weather forecast table">
+                  <table class="forecast-table">
+                    <thead><tr><th scope="col">Time</th><th scope="col">Conditions</th><th scope="col">Temp.</th><th scope="col">RH</th><th scope="col">Wind</th><th scope="col">Gust</th></tr></thead>
+                    <tbody id="hourlyForecastRows"></tbody>
+                  </table>
+                </div>
+              </section>
               <div class="resource-links-row weather-resource-actions"><a id="spotForecastPlannerLink" class="primary-link-button" target="_blank" rel="noopener noreferrer">Request NWS Spot Forecast</a><a id="forecastOfficeLink" class="secondary-link-button" target="_blank" rel="noopener noreferrer">NWS Forecast Office</a></div>
               <p class="source-note">Forecasts are planning information and do not replace an approved burn plan, official spot forecast, permit, smoke-management authorization, or field go/no-go determination.</p>
             </div>
@@ -506,6 +536,29 @@
           <table class="forecast-matrix forecast-matrix--expanded"><thead id="forecastDialogHead"></thead><tbody id="forecastDialogBody"></tbody></table>
         </div>
         <p class="source-note">Daytime relative humidity is the minimum hourly NWS RH forecast within each daytime period. ADI and LVORI are included only when the NWS grid supplies a real numeric value; missing or null grid values are displayed as n/a and excluded from scoring.</p>
+      </div>
+    </dialog>
+
+    <dialog id="hourlyForecastDialog" class="app-dialog app-dialog--hourly-forecast" aria-labelledby="hourlyForecastDialogTitle">
+      <div class="dialog-header">
+        <div>
+          <p class="section-kicker">National Weather Service</p>
+          <h2 id="hourlyForecastDialogTitle">12-Hour Point Forecast</h2>
+        </div>
+        <button class="icon-button" type="button" data-close-dialog="hourlyForecastDialog" aria-label="Close expanded 12-hour forecast">×</button>
+      </div>
+      <div class="dialog-content hourly-forecast-dialog-content">
+        <div class="hourly-forecast-dialog-meta">
+          <p id="hourlyForecastDialogLocation" class="quiet-status">No forecast location selected</p>
+          <p id="hourlyForecastDialogUpdated" class="quiet-status"></p>
+        </div>
+        <div class="table-scroll table-scroll--hourly-expanded" tabindex="0" aria-label="Expanded scrollable 12-hour point forecast table">
+          <table class="forecast-table forecast-table--expanded">
+            <thead id="hourlyForecastDialogHead"></thead>
+            <tbody id="hourlyForecastDialogBody"></tbody>
+          </table>
+        </div>
+        <p class="source-note">Hourly forecast values are supplied by the National Weather Service point forecast. This planning information does not replace an approved burn plan, official NWS Spot Forecast, permit, smoke-management authorization, or field go/no-go determination.</p>
       </div>
     </dialog>
 
@@ -668,6 +721,6 @@
       </div>
     </dialog>
 
-    <script type="module" src="./app.js?v=3.12"></script>
+    <script type="module" src="./app.js?v=3.13"></script>
   </body>
 </html>
